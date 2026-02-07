@@ -4,7 +4,7 @@ import { ToolType } from '@/types';
 import type { TouchPoint } from '@/types';
 import { BaseTool } from './BaseTool';
 import { LAYOUT } from '@/constants';
-import { snapManager } from '@/utils';
+import { snapManager, type SnapResult, type SnapPoint } from '@/utils';
 
 interface BezierPoint {
   anchor: Point;
@@ -190,12 +190,18 @@ export class BezierPenTool extends BaseTool {
     this.updatePreviewPath(finalPoint);
   }
 
-  private findLocalSnap(point: Point): { snapped: boolean; point: Point; snapPoint?: { x: number; y: number } } {
+  private findLocalSnap(point: Point): SnapResult {
     if (this.bezierPoints.length > 1) {
       const start = this.bezierPoints[0].anchor;
       const dist = Math.hypot(point.x - start.x, point.y - start.y);
       if (dist <= this.localSnapThreshold) {
-        return { snapped: true, point: new Point(start.x, start.y), snapPoint: { x: start.x, y: start.y } };
+        const snapPoint: SnapPoint = {
+          x: start.x,
+          y: start.y,
+          objectId: 'local-start',
+          type: 'start'
+        };
+        return { snapped: true, point: new Point(start.x, start.y), snapPoint };
       }
     }
     return { snapped: false, point };

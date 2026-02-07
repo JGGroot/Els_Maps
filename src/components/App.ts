@@ -442,7 +442,7 @@ export class App {
     const options: ExportOptions = {
       format: ExportFormat.PNG,
       quality: 1,
-      multiplier: 4
+      scale: 4
     };
 
     await this.exportManager.export(canvas, options, 'elmap-export');
@@ -455,7 +455,7 @@ export class App {
     const options: ExportOptions = {
       format: ExportFormat.JPEG,
       quality: 0.95,
-      multiplier: 4
+      scale: 4
     };
 
     await this.exportManager.export(canvas, options, 'elmap-export');

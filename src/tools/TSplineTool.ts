@@ -4,7 +4,7 @@ import { ToolType } from '@/types';
 import type { TouchPoint } from '@/types';
 import { BaseTool } from './BaseTool';
 import { LAYOUT } from '@/constants';
-import { snapManager } from '@/utils';
+import { snapManager, type SnapResult, type SnapPoint } from '@/utils';
 
 export class TSplineTool extends BaseTool {
   type = ToolType.TSPLINE;
@@ -171,12 +171,18 @@ export class TSplineTool extends BaseTool {
     this.updatePreviewPath();
   }
 
-  private findLocalSnap(point: Point): { snapped: boolean; point: Point; snapPoint?: { x: number; y: number } } {
+  private findLocalSnap(point: Point): SnapResult {
     if (this.controlPoints.length > 1) {
       const start = this.controlPoints[0];
       const dist = Math.hypot(point.x - start.x, point.y - start.y);
       if (dist <= this.localSnapThreshold) {
-        return { snapped: true, point: new Point(start.x, start.y), snapPoint: { x: start.x, y: start.y } };
+        const snapPoint: SnapPoint = {
+          x: start.x,
+          y: start.y,
+          objectId: 'local-start',
+          type: 'start'
+        };
+        return { snapped: true, point: new Point(start.x, start.y), snapPoint };
       }
     }
     return { snapped: false, point };

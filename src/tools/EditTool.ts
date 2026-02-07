@@ -416,19 +416,12 @@ export class EditTool extends BaseTool {
     console.log(`Looking for point at (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)})`);
 
     for (const ep of this.editPoints) {
-      // Try both direct positioning and world coordinates
       const mx = ep.marker.left ?? 0;
       const my = ep.marker.top ?? 0;
+
+      const dist = Math.hypot(pos.x - mx, pos.y - my);
       
-      // Also try getting world position
-      const worldPos = ep.marker.getObjectScaling?.();
-      const absLeft = ep.marker.getLeft?.() ?? mx;
-      const absTop = ep.marker.getTop?.() ?? my;
-      
-      // Use absolute position which accounts for all transforms
-      const dist = Math.hypot(pos.x - absLeft, pos.y - absTop);
-      
-      console.log(`  Marker ${ep.index}: left=${mx}, top=${my}, absLeft=${absLeft.toFixed(2)}, absTop=${absTop.toFixed(2)}, dist=${dist.toFixed(2)}`);
+      console.log(`  Marker ${ep.index}: left=${mx}, top=${my}, dist=${dist.toFixed(2)}`);
 
       if (dist < threshold) {
         console.log(`  -> Found! Distance ${dist.toFixed(2)} < ${threshold}`);
