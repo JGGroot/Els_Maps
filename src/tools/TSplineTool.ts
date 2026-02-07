@@ -18,7 +18,6 @@ export class TSplineTool extends BaseTool {
   private isDragging: boolean = false;
   private dragStartPoint: Point | null = null;
   private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
-  private readonly localSnapThreshold: number = 25;
 
   protected setupEventListeners(): void {
     if (!this.canvas) return;
@@ -139,6 +138,24 @@ export class TSplineTool extends BaseTool {
       this.cancelDrawing();
     } else if (event.key === 'Enter') {
       this.finishDrawing();
+    } else if (event.key === 'z' && (event.ctrlKey || event.metaKey)) {
+      this.undoLastPoint();
+    }
+  }
+
+  private undoLastPoint(): void {
+    if (this.controlPoints.length === 0) return;
+
+    this.controlPoints.pop();
+    const marker = this.pointMarkers.pop();
+    if (marker && this.canvas) {
+      this.canvas.remove(marker);
+    }
+
+    if (this.controlPoints.length === 0) {
+      this.cancelDrawing();
+    } else {
+      this.updatePreviewPath();
     }
   }
 
@@ -172,10 +189,13 @@ export class TSplineTool extends BaseTool {
   }
 
   private findLocalSnap(point: Point): SnapResult {
+    if (!snapManager.isEnabled()) {
+      return { snapped: false, point };
+    }
     if (this.controlPoints.length > 1) {
       const start = this.controlPoints[0];
       const dist = Math.hypot(point.x - start.x, point.y - start.y);
-      if (dist <= this.localSnapThreshold) {
+      if (dist <= snapManager.getAdjustedThreshold()) {
         const snapPoint: SnapPoint = {
           x: start.x,
           y: start.y,
@@ -327,21 +347,28 @@ export class TSplineTool extends BaseTool {
   private updateSnapIndicator(x: number, y: number): void {
     if (!this.canvas) return;
 
+    // Scale radius inversely with zoom to maintain consistent screen size
+    const zoom = this.canvas.getZoom();
+    const radius = 8 / zoom;
+    const strokeWidth = 2 / zoom;
+
     if (!this.snapIndicator) {
       this.snapIndicator = new Circle({
-        radius: 8,
+        radius,
         fill: 'transparent',
         stroke: '#4a9eff',
-        strokeWidth: 2,
+        strokeWidth,
         originX: 'center',
         originY: 'center',
         selectable: false,
         evented: false
       });
+      (this.snapIndicator as any).isHelper = true;
       this.canvas.add(this.snapIndicator);
     }
 
-    this.snapIndicator.set({ left: x, top: y });
+    this.snapIndicator.set({ left: x, top: y, radius, strokeWidth });
+    this.canvas.bringObjectToFront(this.snapIndicator);
     this.canvas.requestRenderAll();
   }
 

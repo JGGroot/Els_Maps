@@ -209,11 +209,6 @@ export class EditTool extends BaseTool {
     const matrix = polyline.calcTransformMatrix();
     const pathOffset = (polyline as any).pathOffset ?? { x: 0, y: 0 };
 
-    console.log(`=== Creating edit points for polyline ===`);
-    console.log(`Polyline position: left=${polyline.left}, top=${polyline.top}`);
-    console.log(`Polyline scale: scaleX=${polyline.scaleX}, scaleY=${polyline.scaleY}`);
-    console.log(`Polyline points count: ${points.length}`);
-
     points.forEach((pt, index) => {
       // Transform point from polyline local space to canvas space
       const canvasPoint = this.transformPoint(
@@ -221,8 +216,6 @@ export class EditTool extends BaseTool {
         pt.y - pathOffset.y,
         matrix
       );
-
-      console.log(`Point ${index}: local=(${pt.x}, ${pt.y}) -> canvas=(${canvasPoint.x.toFixed(2)}, ${canvasPoint.y.toFixed(2)})`);
 
       const marker = new Circle({
         left: canvasPoint.x,
@@ -248,8 +241,6 @@ export class EditTool extends BaseTool {
         index,
         type: 'anchor'
       });
-
-      console.log(`Marker ${index} added at left=${marker.left}, top=${marker.top}`);
     });
   }
 
@@ -412,24 +403,17 @@ export class EditTool extends BaseTool {
 
   private findPointAtPosition(pos: Point): EditablePoint | null {
     const threshold = 20;
-    
-    console.log(`Looking for point at (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)})`);
 
     for (const ep of this.editPoints) {
       const mx = ep.marker.left ?? 0;
       const my = ep.marker.top ?? 0;
-
       const dist = Math.hypot(pos.x - mx, pos.y - my);
-      
-      console.log(`  Marker ${ep.index}: left=${mx}, top=${my}, dist=${dist.toFixed(2)}`);
 
       if (dist < threshold) {
-        console.log(`  -> Found! Distance ${dist.toFixed(2)} < ${threshold}`);
         return ep;
       }
     }
-    
-    console.log(`  -> No marker found`);
+
     return null;
   }
 
@@ -530,6 +514,14 @@ export class EditTool extends BaseTool {
     // Restore object controls if there was a selected object
     if (this.selectedObject) {
       if (this.editedSinceSelect) {
+        // Force full recalculation of bounding box for Polyline/Path
+        if (this.selectedObject instanceof Polyline && this.selectedObject.points) {
+          // Re-set points to trigger full recalculation
+          this.selectedObject.set({ points: [...this.selectedObject.points] });
+        } else if (this.selectedObject instanceof Path && this.selectedObject.path) {
+          // Re-set path to trigger full recalculation
+          this.selectedObject.set({ path: [...this.selectedObject.path] });
+        }
         if (typeof (this.selectedObject as any)._setPositionDimensions === 'function') {
           (this.selectedObject as any)._setPositionDimensions({});
         }
@@ -543,6 +535,7 @@ export class EditTool extends BaseTool {
         lockMovementY: this.priorObjectState?.lockMovementY ?? false,
         objectCaching: this.editedSinceSelect ? false : (this.priorObjectState?.objectCaching ?? true)
       });
+      this.canvas.requestRenderAll();
     }
     this.priorObjectState = null;
     this.editedSinceSelect = false;

@@ -3,7 +3,7 @@ import { CanvasEngine } from '@/canvas';
 import { GestureManager, type GestureManagerCallbacks } from '@/gestures';
 import { ToolManager, type ToolManagerCallbacks } from '@/tools';
 import { ToolType, type ActionButtonMode } from '@/types';
-import { isMobileDevice, historyManager } from '@/utils';
+import { isMobileDevice, historyManager, snapManager } from '@/utils';
 import { MainLayout } from './layout/MainLayout';
 import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, type EditActionCallbacks } from './layout/DesktopSidebar';
 import { MobileToolbar } from './layout/MobileToolbar';
@@ -314,6 +314,12 @@ export class App {
 
     this.desktopSidebar.setFileCallbacks(fileCallbacks);
     this.desktopSidebar.setStrokeCallbacks(strokeCallbacks);
+    this.desktopSidebar.setSnapCallbacks({
+      onSnapToggle: (enabled: boolean) => {
+        snapManager.setEnabled(enabled);
+      }
+    });
+    this.desktopSidebar.setSnapEnabled(snapManager.isEnabled());
     this.mobileToolbar.setFileCallbacks(fileCallbacks);
 
     // Set up edit action callbacks

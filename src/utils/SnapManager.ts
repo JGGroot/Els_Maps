@@ -35,10 +35,19 @@ export class SnapManager {
     return this.enabled;
   }
 
+  getAdjustedThreshold(): number {
+    const zoom = this.canvas?.getZoom() ?? 1;
+    return this.snapThreshold / zoom;
+  }
+
   findNearestEndpoint(point: Point, excludeObject?: FabricObject): SnapResult {
     if (!this.enabled || !this.canvas) {
       return { snapped: false, point };
     }
+
+    // Adjust threshold for zoom level so snapping feels consistent on screen
+    const zoom = this.canvas.getZoom();
+    const adjustedThreshold = this.snapThreshold / zoom;
 
     const endpoints = this.collectEndpoints(excludeObject);
     let nearestPoint: SnapPoint | null = null;
@@ -46,7 +55,7 @@ export class SnapManager {
 
     for (const ep of endpoints) {
       const dist = Math.hypot(point.x - ep.x, point.y - ep.y);
-      if (dist < nearestDistance && dist <= this.snapThreshold) {
+      if (dist < nearestDistance && dist <= adjustedThreshold) {
         nearestDistance = dist;
         nearestPoint = ep;
       }

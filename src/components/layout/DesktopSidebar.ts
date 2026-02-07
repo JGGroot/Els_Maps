@@ -21,6 +21,10 @@ export interface StrokeColorCallbacks {
   onStrokeWidthChange: (width: number) => void;
 }
 
+export interface SnapCallbacks {
+  onSnapToggle: (enabled: boolean) => void;
+}
+
 export class DesktopSidebar {
   private element: HTMLElement;
   private toolButtons: Map<ToolType, ToolButton> = new Map();
@@ -28,6 +32,8 @@ export class DesktopSidebar {
   private fileCallbacks: FileActionCallbacks | null = null;
   private editCallbacks: EditActionCallbacks | null = null;
   private strokeCallbacks: StrokeColorCallbacks | null = null;
+  private snapCallbacks: SnapCallbacks | null = null;
+  private snapEnabled: boolean = true;
   private undoBtn: HTMLButtonElement | null = null;
   private redoBtn: HTMLButtonElement | null = null;
 
@@ -74,6 +80,10 @@ export class DesktopSidebar {
     // Add edit actions section
     const editSection = this.createEditSection();
     this.element.appendChild(editSection);
+
+    // Add keyboard shortcuts section
+    const shortcutsSection = this.createShortcutsSection();
+    this.element.appendChild(shortcutsSection);
 
     // Add file actions section
     const fileSection = this.createFileSection();
@@ -174,6 +184,28 @@ export class DesktopSidebar {
 
     container.appendChild(widthInputContainer);
 
+    const snapRow = document.createElement('div');
+    snapRow.className = 'flex items-center gap-2 pt-2';
+
+    const snapInput = document.createElement('input');
+    snapInput.type = 'checkbox';
+    snapInput.id = 'global-snap-toggle';
+    snapInput.checked = this.snapEnabled;
+    snapInput.addEventListener('change', (e) => {
+      const enabled = (e.target as HTMLInputElement).checked;
+      this.snapEnabled = enabled;
+      this.snapCallbacks?.onSnapToggle(enabled);
+    });
+    snapRow.appendChild(snapInput);
+
+    const snapLabel = document.createElement('label');
+    snapLabel.className = 'text-xs text-textMuted';
+    snapLabel.htmlFor = 'global-snap-toggle';
+    snapLabel.textContent = 'Snap to endpoints';
+    snapRow.appendChild(snapLabel);
+
+    container.appendChild(snapRow);
+
     section.appendChild(container);
     return section;
   }
@@ -218,6 +250,51 @@ export class DesktopSidebar {
     return section;
   }
 
+  private createShortcutsSection(): HTMLElement {
+    const section = document.createElement('div');
+    section.className = 'p-4 border-t border-border';
+
+    const label = document.createElement('h2');
+    label.className = 'text-sm text-textMuted mb-3';
+    label.textContent = 'Shortcuts';
+    section.appendChild(label);
+
+    const shortcuts = [
+      { key: 'Space + Drag', action: 'Pan canvas' },
+      { key: 'Scroll', action: 'Zoom' },
+      { key: 'Ctrl+Z', action: 'Undo' },
+      { key: 'Ctrl+Shift+Z', action: 'Redo' },
+      { key: 'Ctrl+V', action: 'Paste image' },
+      { key: 'Delete', action: 'Delete selected' },
+      { key: 'Escape', action: 'Cancel / Deselect' },
+      { key: 'Enter', action: 'Finish drawing' },
+      { key: 'Right-click', action: 'Finish drawing' },
+    ];
+
+    const list = document.createElement('div');
+    list.className = 'space-y-1 text-xs';
+
+    shortcuts.forEach(({ key, action }) => {
+      const row = document.createElement('div');
+      row.className = 'flex justify-between items-center';
+
+      const keySpan = document.createElement('span');
+      keySpan.className = 'text-white font-mono bg-charcoal px-1 rounded';
+      keySpan.textContent = key;
+
+      const actionSpan = document.createElement('span');
+      actionSpan.className = 'text-textMuted';
+      actionSpan.textContent = action;
+
+      row.appendChild(keySpan);
+      row.appendChild(actionSpan);
+      list.appendChild(row);
+    });
+
+    section.appendChild(list);
+    return section;
+  }
+
   private createActionButton(label: string, icon: string): HTMLButtonElement {
     const button = document.createElement('button');
     button.className = 'flex items-center justify-center gap-2 px-3 py-2 bg-charcoal-light hover:bg-charcoal-lighter rounded text-sm text-white transition-colors flex-1';
@@ -238,6 +315,16 @@ export class DesktopSidebar {
 
   setStrokeCallbacks(callbacks: StrokeColorCallbacks): void {
     this.strokeCallbacks = callbacks;
+  }
+
+  setSnapCallbacks(callbacks: SnapCallbacks): void {
+    this.snapCallbacks = callbacks;
+  }
+
+  setSnapEnabled(enabled: boolean): void {
+    this.snapEnabled = enabled;
+    const input = this.element.querySelector('#global-snap-toggle') as HTMLInputElement | null;
+    if (input) input.checked = enabled;
   }
 
   updateUndoRedoButtons(canUndo: boolean, canRedo: boolean): void {

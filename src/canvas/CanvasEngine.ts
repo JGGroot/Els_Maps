@@ -1,4 +1,4 @@
-import { Canvas, FabricObject, Point } from 'fabric';
+import { Canvas, FabricObject, Point, Polyline, Path } from 'fabric';
 import type { CanvasConfig, CanvasEventType, CanvasEngineEvents } from '@/types';
 import { CANVAS_DEFAULTS, ZOOM } from '@/constants';
 import { clamp } from '@/utils';
@@ -87,6 +87,13 @@ export class CanvasEngine {
 
     this.canvas.on('object:modified', (e) => {
       if (e.target) {
+        // Ensure Polyline and Path objects update their bounding box after transformations
+        if (e.target instanceof Polyline || e.target instanceof Path) {
+          if (typeof (e.target as any)._setPositionDimensions === 'function') {
+            (e.target as any)._setPositionDimensions({});
+          }
+          e.target.setCoords();
+        }
         this.emit('object:modified', e.target);
       }
     });

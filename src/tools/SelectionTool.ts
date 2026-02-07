@@ -1,6 +1,7 @@
 import type { Point } from 'fabric';
 import { ToolType } from '@/types';
 import { BaseTool } from './BaseTool';
+import { historyManager } from '@/utils';
 
 export class SelectionTool extends BaseTool {
   type = ToolType.SELECT;
@@ -43,6 +44,7 @@ export class SelectionTool extends BaseTool {
         activeObjects.forEach((obj) => this.canvas!.remove(obj));
         this.canvas.discardActiveObject();
         this.canvas.requestRenderAll();
+        historyManager.saveState();
       }
     }
 
