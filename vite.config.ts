@@ -3,7 +3,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 
 export default defineConfig({
-  base: '/ElMapProject/',
+  base: '/Els_Maps/',
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
@@ -16,7 +16,7 @@ export default defineConfig({
         background_color: '#1a1a1a',
         display: 'standalone',
         orientation: 'any',
-        start_url: '/ElMapProject/',
+        start_url: '/Els_Maps/',
         icons: [
           {
             src: 'icons/icon-192x192.png',
