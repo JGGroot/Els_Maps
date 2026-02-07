@@ -1,0 +1,188 @@
+import { Path, Polyline, Line, Point, type Canvas, type FabricObject } from 'fabric';
+
+export interface SnapPoint {
+  x: number;
+  y: number;
+  objectId: string;
+  type: 'start' | 'end';
+  object?: FabricObject;
+}
+
+export interface SnapResult {
+  snapped: boolean;
+  point: Point;
+  snapPoint?: SnapPoint;
+}
+
+export class SnapManager {
+  private canvas: Canvas | null = null;
+  private snapThreshold: number = 25;
+  private enabled: boolean = true;
+
+  setCanvas(canvas: Canvas): void {
+    this.canvas = canvas;
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
+
+  setThreshold(threshold: number): void {
+    this.snapThreshold = threshold;
+  }
+
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  findNearestEndpoint(point: Point, excludeObject?: FabricObject): SnapResult {
+    if (!this.enabled || !this.canvas) {
+      return { snapped: false, point };
+    }
+
+    const endpoints = this.collectEndpoints(excludeObject);
+    let nearestPoint: SnapPoint | null = null;
+    let nearestDistance = Infinity;
+
+    for (const ep of endpoints) {
+      const dist = Math.hypot(point.x - ep.x, point.y - ep.y);
+      if (dist < nearestDistance && dist <= this.snapThreshold) {
+        nearestDistance = dist;
+        nearestPoint = ep;
+      }
+    }
+
+    if (nearestPoint) {
+      return {
+        snapped: true,
+        point: new Point(nearestPoint.x, nearestPoint.y),
+        snapPoint: nearestPoint
+      };
+    }
+
+    return { snapped: false, point };
+  }
+
+  private collectEndpoints(excludeObject?: FabricObject): SnapPoint[] {
+    if (!this.canvas) return [];
+
+    const endpoints: SnapPoint[] = [];
+    const objects = this.canvas.getObjects();
+
+    for (const obj of objects) {
+      if (excludeObject && obj === excludeObject) continue;
+      if ((obj as any).isHelper) continue;
+      // Include all objects, not just selectable ones (tools disable selectability)
+      
+      const id = (obj as any).id || String(objects.indexOf(obj));
+      const pathOffset = (obj as any).pathOffset ?? { x: 0, y: 0 };
+
+      if (obj instanceof Polyline && obj.points && obj.points.length > 0) {
+        const points = obj.points;
+        const matrix = obj.calcTransformMatrix();
+
+        // Start point
+        const startLocal = points[0];
+        const start = this.transformPoint(
+          startLocal.x - pathOffset.x,
+          startLocal.y - pathOffset.y,
+          matrix
+        );
+        endpoints.push({ x: start.x, y: start.y, objectId: id, type: 'start', object: obj });
+
+        // End point
+        if (points.length > 1) {
+          const endLocal = points[points.length - 1];
+          const end = this.transformPoint(
+            endLocal.x - pathOffset.x,
+            endLocal.y - pathOffset.y,
+            matrix
+          );
+          endpoints.push({ x: end.x, y: end.y, objectId: id, type: 'end', object: obj });
+        }
+      } else if (obj instanceof Path && obj.path && obj.path.length > 0) {
+        const pathData = obj.path;
+        const matrix = obj.calcTransformMatrix();
+
+        // Get start point (first M command)
+        const firstCmd = pathData[0];
+        if (firstCmd[0] === 'M') {
+          const start = this.transformPoint(
+            (firstCmd[1] as number) - pathOffset.x,
+            (firstCmd[2] as number) - pathOffset.y,
+            matrix
+          );
+          endpoints.push({ x: start.x, y: start.y, objectId: id, type: 'start', object: obj });
+        }
+
+        // Get end point (last command's end point)
+        const lastCmd = pathData[pathData.length - 1];
+        const endPoint = this.getEndPointFromPathCommand(lastCmd);
+        if (endPoint) {
+          const end = this.transformPoint(
+            endPoint.x - pathOffset.x,
+            endPoint.y - pathOffset.y,
+            matrix
+          );
+          endpoints.push({ x: end.x, y: end.y, objectId: id, type: 'end', object: obj });
+        }
+      } else if (obj instanceof Line) {
+        const matrix = obj.calcTransformMatrix();
+        const x1 = obj.x1 ?? 0;
+        const y1 = obj.y1 ?? 0;
+        const x2 = obj.x2 ?? 0;
+        const y2 = obj.y2 ?? 0;
+
+        const start = this.transformPoint(x1, y1, matrix);
+        const end = this.transformPoint(x2, y2, matrix);
+
+        endpoints.push({ x: start.x, y: start.y, objectId: id, type: 'start', object: obj });
+        endpoints.push({ x: end.x, y: end.y, objectId: id, type: 'end', object: obj });
+      }
+    }
+
+    return endpoints;
+  }
+
+  private getEndPointFromPathCommand(cmd: any[]): { x: number; y: number } | null {
+    const type = cmd[0];
+    switch (type) {
+      case 'M':
+      case 'L':
+        return { x: cmd[1], y: cmd[2] };
+      case 'C':
+        return { x: cmd[5], y: cmd[6] };
+      case 'Q':
+        return { x: cmd[3], y: cmd[4] };
+      case 'S':
+        return { x: cmd[3], y: cmd[4] };
+      case 'T':
+        return { x: cmd[1], y: cmd[2] };
+      case 'A':
+        return { x: cmd[6], y: cmd[7] };
+      case 'Z':
+      case 'z':
+        return null; // Closed path, would need first point
+      default:
+        return null;
+    }
+  }
+
+  private transformPoint(x: number, y: number, matrix: number[]): { x: number; y: number } {
+    return {
+      x: matrix[0] * x + matrix[2] * y + matrix[4],
+      y: matrix[1] * x + matrix[3] * y + matrix[5]
+    };
+  }
+
+  getVisualSnapIndicator(snapPoint: SnapPoint): { x: number; y: number; radius: number } {
+    return {
+      x: snapPoint.x,
+      y: snapPoint.y,
+      radius: this.snapThreshold
+    };
+  }
+}
+
+// Singleton instance
+export const snapManager = new SnapManager();

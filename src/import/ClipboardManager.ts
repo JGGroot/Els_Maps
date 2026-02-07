@@ -1,0 +1,125 @@
+import { FabricImage, type Canvas } from 'fabric';
+
+export class ClipboardManager {
+  private canvas: Canvas | null = null;
+
+  setCanvas(canvas: Canvas): void {
+    this.canvas = canvas;
+  }
+
+  async pasteFromClipboard(): Promise<boolean> {
+    if (!this.canvas) return false;
+
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+
+      for (const item of clipboardItems) {
+        // Check for image types
+        const imageType = item.types.find(type => type.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          return await this.addImageToCanvas(blob);
+        }
+      }
+
+      return false;
+    } catch (error) {
+      // Fallback for browsers that don't support clipboard.read()
+      console.warn('Clipboard API not available, trying fallback');
+      return false;
+    }
+  }
+
+  async copyToClipboard(): Promise<boolean> {
+    if (!this.canvas) return false;
+
+    try {
+      const dataUrl = this.canvas.toDataURL({
+        format: 'png',
+        quality: 1,
+        multiplier: 1
+      });
+
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'image/png': blob
+        })
+      ]);
+
+      return true;
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      return false;
+    }
+  }
+
+  private async addImageToCanvas(blob: Blob): Promise<boolean> {
+    if (!this.canvas) return false;
+
+    try {
+      const dataUrl = await this.blobToDataUrl(blob);
+      const img = await FabricImage.fromURL(dataUrl);
+
+      // Scale image if too large
+      const maxSize = 800;
+      const imgWidth = img.width ?? 1;
+      const imgHeight = img.height ?? 1;
+
+      if (imgWidth > maxSize || imgHeight > maxSize) {
+        const scale = Math.min(maxSize / imgWidth, maxSize / imgHeight);
+        img.scale(scale);
+      }
+
+      // Center on canvas
+      const canvasCenter = this.canvas.getCenterPoint();
+      img.set({
+        left: canvasCenter.x,
+        top: canvasCenter.y,
+        originX: 'center',
+        originY: 'center'
+      });
+
+      this.canvas.add(img);
+      this.canvas.setActiveObject(img);
+      this.canvas.requestRenderAll();
+
+      return true;
+    } catch (error) {
+      console.error('Failed to paste image:', error);
+      return false;
+    }
+  }
+
+  private blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to read blob'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  setupPasteListener(element: HTMLElement): () => void {
+    const handler = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const blob = item.getAsFile();
+          if (blob) {
+            await this.addImageToCanvas(blob);
+          }
+          return;
+        }
+      }
+    };
+
+    element.addEventListener('paste', handler);
+    return () => element.removeEventListener('paste', handler);
+  }
+}
