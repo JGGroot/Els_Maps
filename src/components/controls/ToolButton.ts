@@ -49,10 +49,10 @@ export class ToolButton {
         <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/>
         <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
       </svg>`,
-      'pen-tool': `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="4 20 8 16 12 20 16 16 20 20"/>
-        <line x1="4" y1="20" x2="4" y2="16"/>
-        <line x1="20" y1="20" x2="20" y2="16"/>
+      line: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="4" y1="20" x2="20" y2="4"/>
+        <circle cx="4" cy="20" r="2" fill="currentColor"/>
+        <circle cx="20" cy="4" r="2" fill="currentColor"/>
       </svg>`,
       bezier: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M2 20 C 8 6, 16 6, 22 20"/>
@@ -80,6 +80,19 @@ export class ToolButton {
       </svg>`,
       ellipse: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <ellipse cx="12" cy="12" rx="10" ry="7"/>
+      </svg>`,
+      abc: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <text x="2" y="16" font-family="sans-serif" font-size="12" font-weight="bold" fill="currentColor" stroke="none">Abc</text>
+      </svg>`,
+      edit: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>`,
+      'edit-nodes': `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 18 Q 12 6, 20 18"/>
+        <rect x="2" y="16" width="4" height="4" fill="currentColor" stroke="currentColor"/>
+        <rect x="18" y="16" width="4" height="4" fill="currentColor" stroke="currentColor"/>
+        <circle cx="12" cy="10" r="3" fill="none" stroke="currentColor"/>
       </svg>`
     };
 

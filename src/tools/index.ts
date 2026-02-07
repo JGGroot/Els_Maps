@@ -8,5 +8,6 @@ export { AutosplineTool } from './AutosplineTool';
 export { TSplineTool } from './TSplineTool';
 export { RectangleTool } from './RectangleTool';
 export { EllipseTool } from './EllipseTool';
+export { TextTool } from './TextTool';
 export { ToolManager } from './ToolManager';
 export type { ToolManagerCallbacks } from './ToolManager';

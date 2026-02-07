@@ -11,6 +11,7 @@ import { AutosplineTool } from './AutosplineTool';
 import { TSplineTool } from './TSplineTool';
 import { RectangleTool } from './RectangleTool';
 import { EllipseTool } from './EllipseTool';
+import { TextTool } from './TextTool';
 import { isMobileDevice } from '@/utils';
 
 type ToolEventType = 'tool:changed' | 'drawing:started' | 'drawing:ended';
@@ -45,6 +46,7 @@ export class ToolManager {
     this.registerTool(new TSplineTool());
     this.registerTool(new RectangleTool());
     this.registerTool(new EllipseTool());
+    this.registerTool(new TextTool());
   }
 
   setCanvas(canvas: Canvas): void {

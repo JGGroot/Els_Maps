@@ -9,7 +9,7 @@ import { snapManager, type SnapResult, type SnapPoint } from '@/utils';
 export class PolylineTool extends BaseTool {
   type = ToolType.POLYLINE;
   name = 'Line';
-  icon = 'pen-tool';
+  icon = 'line';
 
   private points: Point[] = [];
   private committedLines: Line[] = [];

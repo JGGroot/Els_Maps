@@ -81,10 +81,6 @@ export class DesktopSidebar {
     const editSection = this.createEditSection();
     this.element.appendChild(editSection);
 
-    // Add keyboard shortcuts section
-    const shortcutsSection = this.createShortcutsSection();
-    this.element.appendChild(shortcutsSection);
-
     // Add file actions section
     const fileSection = this.createFileSection();
     this.element.appendChild(fileSection);
@@ -152,8 +148,39 @@ export class DesktopSidebar {
     colorInput.value = '#ffffff';
     colorInput.addEventListener('input', (e) => {
       this.strokeCallbacks?.onStrokeColorChange((e.target as HTMLInputElement).value);
+      this.updateQuickColorSelection((e.target as HTMLInputElement).value);
     });
     container.appendChild(colorInput);
+
+    // Quick color swatches
+    const quickColors = [
+      '#ffffff', '#000000', '#ff0000', '#00ff00', '#0000ff', '#ffff00',
+      '#ff00ff', '#00ffff', '#ff8000', '#8000ff', '#00ff80', '#ff0080',
+      '#808080', '#c0c0c0', '#800000', '#008000', '#000080', '#808000'
+    ];
+
+    const swatchContainer = document.createElement('div');
+    swatchContainer.className = 'grid grid-cols-6 gap-1 mt-2';
+    swatchContainer.id = 'quick-color-swatches';
+
+    quickColors.forEach((color) => {
+      const swatch = document.createElement('button');
+      swatch.className = 'w-6 h-6 rounded border border-border hover:border-white transition-colors';
+      swatch.style.backgroundColor = color;
+      swatch.title = color;
+      swatch.dataset.color = color;
+      if (color === '#ffffff') {
+        swatch.classList.add('ring-2', 'ring-primary', 'ring-offset-1', 'ring-offset-surface');
+      }
+      swatch.addEventListener('click', () => {
+        colorInput.value = color;
+        this.strokeCallbacks?.onStrokeColorChange(color);
+        this.updateQuickColorSelection(color);
+      });
+      swatchContainer.appendChild(swatch);
+    });
+
+    container.appendChild(swatchContainer);
 
     // Stroke width
     const widthLabel = document.createElement('label');
@@ -250,51 +277,6 @@ export class DesktopSidebar {
     return section;
   }
 
-  private createShortcutsSection(): HTMLElement {
-    const section = document.createElement('div');
-    section.className = 'p-4 border-t border-border';
-
-    const label = document.createElement('h2');
-    label.className = 'text-sm text-textMuted mb-3';
-    label.textContent = 'Shortcuts';
-    section.appendChild(label);
-
-    const shortcuts = [
-      { key: 'Space + Drag', action: 'Pan canvas' },
-      { key: 'Scroll', action: 'Zoom' },
-      { key: 'Ctrl+Z', action: 'Undo' },
-      { key: 'Ctrl+Shift+Z', action: 'Redo' },
-      { key: 'Ctrl+V', action: 'Paste image' },
-      { key: 'Delete', action: 'Delete selected' },
-      { key: 'Escape', action: 'Cancel / Deselect' },
-      { key: 'Enter', action: 'Finish drawing' },
-      { key: 'Right-click', action: 'Finish drawing' },
-    ];
-
-    const list = document.createElement('div');
-    list.className = 'space-y-1 text-xs';
-
-    shortcuts.forEach(({ key, action }) => {
-      const row = document.createElement('div');
-      row.className = 'flex justify-between items-center';
-
-      const keySpan = document.createElement('span');
-      keySpan.className = 'text-white font-mono bg-charcoal px-1 rounded';
-      keySpan.textContent = key;
-
-      const actionSpan = document.createElement('span');
-      actionSpan.className = 'text-textMuted';
-      actionSpan.textContent = action;
-
-      row.appendChild(keySpan);
-      row.appendChild(actionSpan);
-      list.appendChild(row);
-    });
-
-    section.appendChild(list);
-    return section;
-  }
-
   private createActionButton(label: string, icon: string): HTMLButtonElement {
     const button = document.createElement('button');
     button.className = 'flex items-center justify-center gap-2 px-3 py-2 bg-charcoal-light hover:bg-charcoal-lighter rounded text-sm text-white transition-colors flex-1';
@@ -338,6 +320,18 @@ export class DesktopSidebar {
       this.redoBtn.style.opacity = canRedo ? '1' : '0.5';
       this.redoBtn.style.cursor = canRedo ? 'pointer' : 'not-allowed';
     }
+  }
+
+  private updateQuickColorSelection(color: string): void {
+    const swatches = this.element.querySelectorAll('#quick-color-swatches button');
+    swatches.forEach((swatch) => {
+      const btn = swatch as HTMLButtonElement;
+      if (btn.dataset.color?.toLowerCase() === color.toLowerCase()) {
+        btn.classList.add('ring-2', 'ring-primary', 'ring-offset-1', 'ring-offset-surface');
+      } else {
+        btn.classList.remove('ring-2', 'ring-primary', 'ring-offset-1', 'ring-offset-surface');
+      }
+    });
   }
 
   private handleToolClick = (type: ToolType): void => {

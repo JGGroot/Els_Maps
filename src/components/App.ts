@@ -6,7 +6,7 @@ import { ToolType, type ActionButtonMode } from '@/types';
 import { isMobileDevice, historyManager, snapManager } from '@/utils';
 import { MainLayout } from './layout/MainLayout';
 import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, type EditActionCallbacks } from './layout/DesktopSidebar';
-import { MobileToolbar } from './layout/MobileToolbar';
+import { MobileToolbar, type StrokeColorCallbacks as MobileStrokeColorCallbacks } from './layout/MobileToolbar';
 import { PropertiesPanel } from './layout/PropertiesPanel';
 import { BottomSheet } from './layout/BottomSheet';
 import { CanvasContainer } from './canvas/CanvasContainer';
@@ -116,8 +116,17 @@ export class App {
 
     // Track spacebar key state
     let spacePressed = false;
+    const isEditingText = (): boolean => {
+      const canvas = this.engine?.getCanvas();
+      if (!canvas) return false;
+      const activeObj = canvas.getActiveObject();
+      return activeObj?.type === 'i-text' && (activeObj as any).isEditing === true;
+    };
+
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' && !e.repeat) {
+        // Don't intercept spacebar when editing text
+        if (isEditingText()) return;
         e.preventDefault();
         spacePressed = true;
         canvasEl.style.cursor = 'grab';
@@ -322,6 +331,14 @@ export class App {
     this.desktopSidebar.setSnapEnabled(snapManager.isEnabled());
     this.mobileToolbar.setFileCallbacks(fileCallbacks);
 
+    // Set up mobile stroke color callbacks
+    const mobileStrokeCallbacks: MobileStrokeColorCallbacks = {
+      onStrokeColorChange: (color: string) => {
+        this.toolManager?.setConfig({ strokeColor: color });
+      }
+    };
+    this.mobileToolbar.setStrokeCallbacks(mobileStrokeCallbacks);
+
     // Set up edit action callbacks
     const editCallbacks: EditActionCallbacks = {
       onUndo: () => {
@@ -362,6 +379,12 @@ export class App {
       },
       onStrokeWidthChange: (width: number) => {
         this.updateSelectedObjectProperty('strokeWidth', width);
+      },
+      onFillColorChange: (color: string) => {
+        this.updateSelectedObjectProperty('fill', color);
+      },
+      onFontSizeChange: (size: number) => {
+        this.updateSelectedObjectProperty('fontSize', size);
       },
       onImageLockChange: (locked: boolean) => {
         this.updateSelectedObjectLock(locked);

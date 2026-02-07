@@ -4,6 +4,8 @@ import { LAYOUT } from '@/constants';
 export interface BottomSheetCallbacks {
   onStrokeColorChange: (color: string) => void;
   onStrokeWidthChange: (width: number) => void;
+  onFillColorChange: (color: string) => void;
+  onFontSizeChange: (size: number) => void;
   onImageLockChange: (locked: boolean) => void;
 }
 
@@ -110,6 +112,7 @@ export class BottomSheet {
     const stroke = (selectedObject.stroke as string) || '#ffffff';
     const strokeWidth = selectedObject.strokeWidth || 2;
     const isImage = selectedObject.type === 'image';
+    const isText = selectedObject.type === 'i-text' || selectedObject.type === 'text';
     const isLocked = Boolean(
       selectedObject.lockMovementX ||
       selectedObject.lockMovementY ||
@@ -118,8 +121,27 @@ export class BottomSheet {
       selectedObject.lockRotation
     );
 
-    this.contentEl.innerHTML = `
-      <div class="space-y-4">
+    // For text objects, use fill instead of stroke
+    const textColor = isText ? ((selectedObject.fill as string) || '#ffffff') : '';
+    const fontSize = isText ? ((selectedObject as any).fontSize || 16) : 0;
+
+    let html = '<div class="space-y-4">';
+
+    if (isText) {
+      // Text-specific properties
+      html += `
+        <div>
+          <label class="block text-sm text-textMuted mb-2">Text Color</label>
+          <input type="color" value="${textColor}" class="w-full h-12 rounded cursor-pointer bg-charcoal border border-border" id="sheet-fill-color"/>
+        </div>
+        <div>
+          <label class="block text-sm text-textMuted mb-2">Font Size: <span id="font-size-value">${fontSize}px</span></label>
+          <input type="range" min="8" max="120" value="${fontSize}" class="w-full h-8" id="sheet-font-size"/>
+        </div>
+      `;
+    } else if (!isImage) {
+      // Shape properties (stroke)
+      html += `
         <div>
           <label class="block text-sm text-textMuted mb-2">Stroke Color</label>
           <input type="color" value="${stroke}" class="w-full h-12 rounded cursor-pointer bg-charcoal border border-border" id="sheet-stroke-color"/>
@@ -128,32 +150,51 @@ export class BottomSheet {
           <label class="block text-sm text-textMuted mb-2">Stroke Width: <span id="width-value">${strokeWidth}px</span></label>
           <input type="range" min="1" max="20" value="${strokeWidth}" class="w-full h-8" id="sheet-stroke-width"/>
         </div>
-        ${
-          isImage
-            ? `
+      `;
+    }
+
+    if (isImage) {
+      html += `
         <div class="flex items-center gap-2">
           <input type="checkbox" id="sheet-image-lock" ${isLocked ? 'checked' : ''}/>
           <label for="sheet-image-lock" class="text-sm text-textMuted">Lock Image</label>
         </div>
-        `
-            : ''
-        }
-      </div>
-    `;
+      `;
+    }
 
-    const colorInput = this.contentEl.querySelector('#sheet-stroke-color') as HTMLInputElement;
-    const widthInput = this.contentEl.querySelector('#sheet-stroke-width') as HTMLInputElement;
-    const widthValue = this.contentEl.querySelector('#width-value') as HTMLSpanElement;
+    html += '</div>';
+    this.contentEl.innerHTML = html;
 
-    colorInput?.addEventListener('input', (e) => {
-      this.callbacks.onStrokeColorChange((e.target as HTMLInputElement).value);
-    });
+    // Attach event listeners
+    if (isText) {
+      const fillInput = this.contentEl.querySelector('#sheet-fill-color') as HTMLInputElement;
+      const fontSizeInput = this.contentEl.querySelector('#sheet-font-size') as HTMLInputElement;
+      const fontSizeValue = this.contentEl.querySelector('#font-size-value') as HTMLSpanElement;
 
-    widthInput?.addEventListener('input', (e) => {
-      const value = (e.target as HTMLInputElement).value;
-      if (widthValue) widthValue.textContent = `${value}px`;
-      this.callbacks.onStrokeWidthChange(Number(value));
-    });
+      fillInput?.addEventListener('input', (e) => {
+        this.callbacks.onFillColorChange((e.target as HTMLInputElement).value);
+      });
+
+      fontSizeInput?.addEventListener('input', (e) => {
+        const size = Number((e.target as HTMLInputElement).value);
+        if (fontSizeValue) fontSizeValue.textContent = `${size}px`;
+        this.callbacks.onFontSizeChange(size);
+      });
+    } else if (!isImage) {
+      const colorInput = this.contentEl.querySelector('#sheet-stroke-color') as HTMLInputElement;
+      const widthInput = this.contentEl.querySelector('#sheet-stroke-width') as HTMLInputElement;
+      const widthValue = this.contentEl.querySelector('#width-value') as HTMLSpanElement;
+
+      colorInput?.addEventListener('input', (e) => {
+        this.callbacks.onStrokeColorChange((e.target as HTMLInputElement).value);
+      });
+
+      widthInput?.addEventListener('input', (e) => {
+        const value = (e.target as HTMLInputElement).value;
+        if (widthValue) widthValue.textContent = `${value}px`;
+        this.callbacks.onStrokeWidthChange(Number(value));
+      });
+    }
 
     const lockInput = this.contentEl.querySelector('#sheet-image-lock') as HTMLInputElement | null;
     lockInput?.addEventListener('change', (e) => {

@@ -10,12 +10,20 @@ export interface FileActionCallbacks {
   onCopyToClipboard: () => void;
 }
 
+export interface StrokeColorCallbacks {
+  onStrokeColorChange: (color: string) => void;
+}
+
 export class MobileToolbar {
   private element: HTMLElement;
   private toolButtons: Map<ToolType, ToolButton> = new Map();
   private onToolSelect: (type: ToolType) => void;
   private fileCallbacks: FileActionCallbacks | null = null;
+  private strokeCallbacks: StrokeColorCallbacks | null = null;
   private fileMenu: HTMLElement | null = null;
+  private colorMenu: HTMLElement | null = null;
+  private colorBtn: HTMLButtonElement | null = null;
+  private currentColor: string = '#ffffff';
 
   constructor(parent: HTMLElement, tools: ITool[], onToolSelect: (type: ToolType) => void) {
     this.onToolSelect = onToolSelect;
@@ -44,11 +52,128 @@ export class MobileToolbar {
 
     this.element.appendChild(scrollContainer);
 
+    // Add color picker button
+    this.colorBtn = this.createColorButton();
+    this.element.appendChild(this.colorBtn);
+
     // Add file menu button
     const fileMenuBtn = this.createFileMenuButton();
     this.element.appendChild(fileMenuBtn);
 
     parent.appendChild(this.element);
+  }
+
+  private createColorButton(): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.className = 'flex items-center justify-center p-2 hover:bg-charcoal-light rounded transition-colors flex-shrink-0';
+    button.innerHTML = `<span class="w-6 h-6 rounded border-2 border-white" style="background-color: ${this.currentColor}"></span>`;
+    button.title = 'Stroke Color';
+    button.addEventListener('click', () => this.toggleColorMenu());
+    return button;
+  }
+
+  private toggleColorMenu(): void {
+    if (this.colorMenu && this.colorMenu.parentElement) {
+      this.colorMenu.remove();
+      this.colorMenu = null;
+    } else {
+      this.colorMenu = this.createColorMenu();
+      document.body.appendChild(this.colorMenu);
+    }
+  }
+
+  private createColorMenu(): HTMLElement {
+    const menu = document.createElement('div');
+    menu.className = 'fixed bg-charcoal-dark border border-border rounded shadow-lg z-popover p-3';
+    menu.style.bottom = `calc(${LAYOUT.toolbarHeight}px + 10px)`;
+    menu.style.right = '50px';
+    menu.style.width = '200px';
+
+    const closeMenu = () => {
+      menu.remove();
+      this.colorMenu = null;
+    };
+
+    // Label
+    const label = document.createElement('div');
+    label.className = 'text-xs text-textMuted mb-2';
+    label.textContent = 'Stroke Color';
+    menu.appendChild(label);
+
+    // Color input
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.className = 'w-full h-8 rounded cursor-pointer bg-charcoal border border-border mb-2';
+    colorInput.value = this.currentColor;
+    colorInput.addEventListener('input', (e) => {
+      const color = (e.target as HTMLInputElement).value;
+      this.setColor(color);
+      this.updateSwatchSelection(menu, color);
+    });
+    menu.appendChild(colorInput);
+
+    // Quick color swatches
+    const quickColors = [
+      '#ffffff', '#000000', '#ff0000', '#00ff00', '#0000ff', '#ffff00',
+      '#ff00ff', '#00ffff', '#ff8000', '#8000ff', '#00ff80', '#ff0080',
+      '#808080', '#c0c0c0', '#800000', '#008000', '#000080', '#808000'
+    ];
+
+    const swatchContainer = document.createElement('div');
+    swatchContainer.className = 'grid grid-cols-6 gap-1';
+
+    quickColors.forEach((color) => {
+      const swatch = document.createElement('button');
+      swatch.className = 'w-7 h-7 rounded border border-border hover:border-white transition-colors';
+      swatch.style.backgroundColor = color;
+      swatch.title = color;
+      swatch.dataset.color = color;
+      if (color.toLowerCase() === this.currentColor.toLowerCase()) {
+        swatch.classList.add('ring-2', 'ring-primary', 'ring-offset-1', 'ring-offset-charcoal-dark');
+      }
+      swatch.addEventListener('click', () => {
+        colorInput.value = color;
+        this.setColor(color);
+        this.updateSwatchSelection(menu, color);
+      });
+      swatchContainer.appendChild(swatch);
+    });
+
+    menu.appendChild(swatchContainer);
+
+    // Close menu when clicking outside
+    const closeHandler = (e: Event) => {
+      if (!menu.contains(e.target as Node) && e.target !== this.colorBtn) {
+        closeMenu();
+        document.removeEventListener('click', closeHandler);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeHandler), 0);
+
+    return menu;
+  }
+
+  private updateSwatchSelection(menu: HTMLElement, color: string): void {
+    const swatches = menu.querySelectorAll('[data-color]');
+    swatches.forEach((swatch) => {
+      const btn = swatch as HTMLButtonElement;
+      if (btn.dataset.color?.toLowerCase() === color.toLowerCase()) {
+        btn.classList.add('ring-2', 'ring-primary', 'ring-offset-1', 'ring-offset-charcoal-dark');
+      } else {
+        btn.classList.remove('ring-2', 'ring-primary', 'ring-offset-1', 'ring-offset-charcoal-dark');
+      }
+    });
+  }
+
+  private setColor(color: string): void {
+    this.currentColor = color;
+    if (this.colorBtn) {
+      const swatch = this.colorBtn.querySelector('span');
+      if (swatch) {
+        swatch.style.backgroundColor = color;
+      }
+    }
+    this.strokeCallbacks?.onStrokeColorChange(color);
   }
 
   private createFileMenuButton(): HTMLButtonElement {
@@ -143,6 +268,10 @@ export class MobileToolbar {
     this.fileCallbacks = callbacks;
   }
 
+  setStrokeCallbacks(callbacks: StrokeColorCallbacks): void {
+    this.strokeCallbacks = callbacks;
+  }
+
   private handleToolClick = (type: ToolType): void => {
     this.onToolSelect(type);
   };
@@ -161,6 +290,7 @@ export class MobileToolbar {
     this.toolButtons.forEach((button) => button.destroy());
     this.toolButtons.clear();
     this.fileMenu?.remove();
+    this.colorMenu?.remove();
     this.element.remove();
   }
 }

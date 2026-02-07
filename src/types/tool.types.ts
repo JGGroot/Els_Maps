@@ -10,7 +10,8 @@ export enum ToolType {
   AUTOSPLINE = 'autospline',
   TSPLINE = 'tspline',
   RECTANGLE = 'rectangle',
-  ELLIPSE = 'ellipse'
+  ELLIPSE = 'ellipse',
+  TEXT = 'text'
 }
 
 export interface ToolState {
