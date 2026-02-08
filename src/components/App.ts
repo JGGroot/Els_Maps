@@ -1,4 +1,5 @@
 import { Point } from 'fabric';
+import { jsPDF } from 'jspdf';
 import { CanvasEngine, canvasLockManager } from '@/canvas';
 import { GestureManager, type GestureManagerCallbacks } from '@/gestures';
 import { ToolManager, type ToolManagerCallbacks } from '@/tools';
@@ -563,6 +564,35 @@ export class App {
   private handleExportPDF = async (): Promise<void> => {
     const canvas = this.engine?.getCanvas();
     if (!canvas) return;
+
+    // Use locked region if canvas is locked
+    if (canvasLockManager.isLocked()) {
+      const lockedState = canvasLockManager.getLockedState();
+      const dataUrl = canvasLockManager.toDataURL({ format: 'png', quality: 1, multiplier: 2 });
+
+      const width = lockedState.width;
+      const height = lockedState.height;
+      const orientation = width > height ? 'landscape' : 'portrait';
+
+      const pdf = new jsPDF({
+        orientation,
+        unit: 'px',
+        format: [width, height]
+      });
+
+      pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
+      const blob = pdf.output('blob');
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'elmap-export.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      return;
+    }
 
     const options: ExportOptions = {
       format: ExportFormat.PDF,
