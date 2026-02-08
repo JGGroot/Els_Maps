@@ -7,6 +7,7 @@ export interface BottomSheetCallbacks {
   onFillColorChange: (color: string) => void;
   onFontSizeChange: (size: number) => void;
   onImageLockChange: (locked: boolean) => void;
+  onLockCanvasToImage: () => void;
 }
 
 export class BottomSheet {
@@ -159,6 +160,12 @@ export class BottomSheet {
           <input type="checkbox" id="sheet-image-lock" ${isLocked ? 'checked' : ''}/>
           <label for="sheet-image-lock" class="text-sm text-textMuted">Lock Image</label>
         </div>
+        <div class="mt-3">
+          <button id="sheet-lock-canvas-to-image" class="w-full px-3 py-2 bg-accent hover:bg-accent/80 rounded text-sm text-white transition-colors">
+            Lock Canvas to Image
+          </button>
+          <p class="text-xs text-textMuted mt-1">Exports will crop to this image's bounds</p>
+        </div>
       `;
     }
 
@@ -199,6 +206,11 @@ export class BottomSheet {
     const lockInput = this.contentEl.querySelector('#sheet-image-lock') as HTMLInputElement | null;
     lockInput?.addEventListener('change', (e) => {
       this.callbacks.onImageLockChange((e.target as HTMLInputElement).checked);
+    });
+
+    const lockCanvasBtn = this.contentEl.querySelector('#sheet-lock-canvas-to-image') as HTMLButtonElement | null;
+    lockCanvasBtn?.addEventListener('click', () => {
+      this.callbacks.onLockCanvasToImage();
     });
   }
 

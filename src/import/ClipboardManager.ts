@@ -1,10 +1,12 @@
 import { FabricImage, type Canvas } from 'fabric';
+import { canvasLockManager } from '@/canvas';
 
 export class ClipboardManager {
   private canvas: Canvas | null = null;
 
   setCanvas(canvas: Canvas): void {
     this.canvas = canvas;
+    canvasLockManager.setCanvas(canvas);
   }
 
   async pasteFromClipboard(): Promise<boolean> {
@@ -63,15 +65,7 @@ export class ClipboardManager {
       const dataUrl = await this.blobToDataUrl(blob);
       const img = await FabricImage.fromURL(dataUrl);
 
-      // Scale image if too large
-      const maxSize = 800;
-      const imgWidth = img.width ?? 1;
-      const imgHeight = img.height ?? 1;
-
-      if (imgWidth > maxSize || imgHeight > maxSize) {
-        const scale = Math.min(maxSize / imgWidth, maxSize / imgHeight);
-        img.scale(scale);
-      }
+      // No scaling - preserve full original quality for lossless workflow
 
       // Center on canvas
       const canvasCenter = this.canvas.getCenterPoint();
@@ -85,6 +79,11 @@ export class ClipboardManager {
       this.canvas.add(img);
       this.canvas.setActiveObject(img);
       this.canvas.requestRenderAll();
+
+      // Lock canvas to this image if auto-lock is enabled
+      if (canvasLockManager.isAutoLockEnabled()) {
+        canvasLockManager.lockToImage(img);
+      }
 
       return true;
     } catch (error) {

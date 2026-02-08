@@ -7,6 +7,7 @@ export interface FileActionCallbacks {
   onImport: () => void;
   onExportPNG: () => void;
   onExportJPG: () => void;
+  onExportPDF: () => void;
   onCopyToClipboard: () => void;
 }
 
@@ -25,6 +26,12 @@ export interface SnapCallbacks {
   onSnapToggle: (enabled: boolean) => void;
 }
 
+export interface CanvasLockCallbacks {
+  onCanvasLockToggle: (enabled: boolean) => void;
+  onUnlockCanvas: () => void;
+  isCanvasLocked: () => boolean;
+}
+
 export class DesktopSidebar {
   private element: HTMLElement;
   private toolButtons: Map<ToolType, ToolButton> = new Map();
@@ -33,9 +40,12 @@ export class DesktopSidebar {
   private editCallbacks: EditActionCallbacks | null = null;
   private strokeCallbacks: StrokeColorCallbacks | null = null;
   private snapCallbacks: SnapCallbacks | null = null;
+  private canvasLockCallbacks: CanvasLockCallbacks | null = null;
   private snapEnabled: boolean = true;
+  private canvasLockEnabled: boolean = false;
   private undoBtn: HTMLButtonElement | null = null;
   private redoBtn: HTMLButtonElement | null = null;
+  private lockStatusEl: HTMLElement | null = null;
 
   constructor(parent: HTMLElement, tools: ITool[], onToolSelect: (type: ToolType) => void) {
     this.onToolSelect = onToolSelect;
@@ -254,6 +264,41 @@ export class DesktopSidebar {
     importBtn.addEventListener('click', () => this.fileCallbacks?.onImport());
     buttonsContainer.appendChild(importBtn);
 
+    // Canvas Lock toggle
+    const lockRow = document.createElement('div');
+    lockRow.className = 'flex items-center gap-2 py-1';
+
+    const lockInput = document.createElement('input');
+    lockInput.type = 'checkbox';
+    lockInput.id = 'canvas-lock-toggle';
+    lockInput.checked = this.canvasLockEnabled;
+    lockInput.addEventListener('change', (e) => {
+      const enabled = (e.target as HTMLInputElement).checked;
+      this.canvasLockEnabled = enabled;
+      this.canvasLockCallbacks?.onCanvasLockToggle(enabled);
+    });
+    lockRow.appendChild(lockInput);
+
+    const lockLabel = document.createElement('label');
+    lockLabel.className = 'text-xs text-textMuted';
+    lockLabel.htmlFor = 'canvas-lock-toggle';
+    lockLabel.textContent = 'Lock export to image';
+    lockRow.appendChild(lockLabel);
+
+    buttonsContainer.appendChild(lockRow);
+
+    // Lock status indicator
+    this.lockStatusEl = document.createElement('div');
+    this.lockStatusEl.className = 'text-xs text-accent hidden items-center gap-1 py-1';
+    this.lockStatusEl.innerHTML = `
+      <span>Canvas locked</span>
+      <button class="unlock-btn text-textMuted hover:text-white ml-auto">[Unlock]</button>
+    `;
+    this.lockStatusEl.querySelector('.unlock-btn')?.addEventListener('click', () => {
+      this.canvasLockCallbacks?.onUnlockCanvas();
+    });
+    buttonsContainer.appendChild(this.lockStatusEl);
+
     // Export buttons row
     const exportRow = document.createElement('div');
     exportRow.className = 'flex gap-2';
@@ -265,6 +310,10 @@ export class DesktopSidebar {
     const exportJpgBtn = this.createActionButton('JPG', 'export');
     exportJpgBtn.addEventListener('click', () => this.fileCallbacks?.onExportJPG());
     exportRow.appendChild(exportJpgBtn);
+
+    const exportPdfBtn = this.createActionButton('PDF', 'export');
+    exportPdfBtn.addEventListener('click', () => this.fileCallbacks?.onExportPDF());
+    exportRow.appendChild(exportPdfBtn);
 
     buttonsContainer.appendChild(exportRow);
 
@@ -303,10 +352,32 @@ export class DesktopSidebar {
     this.snapCallbacks = callbacks;
   }
 
+  setCanvasLockCallbacks(callbacks: CanvasLockCallbacks): void {
+    this.canvasLockCallbacks = callbacks;
+  }
+
   setSnapEnabled(enabled: boolean): void {
     this.snapEnabled = enabled;
     const input = this.element.querySelector('#global-snap-toggle') as HTMLInputElement | null;
     if (input) input.checked = enabled;
+  }
+
+  setCanvasLockEnabled(enabled: boolean): void {
+    this.canvasLockEnabled = enabled;
+    const input = this.element.querySelector('#canvas-lock-toggle') as HTMLInputElement | null;
+    if (input) input.checked = enabled;
+  }
+
+  updateCanvasLockStatus(isLocked: boolean): void {
+    if (this.lockStatusEl) {
+      if (isLocked) {
+        this.lockStatusEl.classList.remove('hidden');
+        this.lockStatusEl.classList.add('flex');
+      } else {
+        this.lockStatusEl.classList.add('hidden');
+        this.lockStatusEl.classList.remove('flex');
+      }
+    }
   }
 
   updateUndoRedoButtons(canUndo: boolean, canRedo: boolean): void {

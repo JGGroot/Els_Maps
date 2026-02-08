@@ -93,11 +93,24 @@ export class StorageManager {
     if (!this.canvas) return false;
 
     try {
+      // Generate a small preview image
+      const preview = this.canvas.toDataURL({
+        format: 'png',
+        quality: 0.8,
+        multiplier: 0.25 // Small preview
+      });
+
+      // Check if project already exists to preserve createdAt
+      const existing = await this.indexedDB.get<{
+        metadata: { createdAt: number };
+      }>(`project:${id}`);
+
       const data = {
         canvas: this.canvas.toObject(),
+        preview,
         metadata: {
           name,
-          createdAt: Date.now(),
+          createdAt: existing?.metadata?.createdAt ?? Date.now(),
           modifiedAt: Date.now()
         }
       };
@@ -131,14 +144,15 @@ export class StorageManager {
   }
 
   async listProjects(): Promise<
-    Array<{ id: string; name: string; modifiedAt: number }>
+    Array<{ id: string; name: string; modifiedAt: number; preview?: string }>
   > {
     const keys = await this.indexedDB.getAllKeys();
-    const projects: Array<{ id: string; name: string; modifiedAt: number }> = [];
+    const projects: Array<{ id: string; name: string; modifiedAt: number; preview?: string }> = [];
 
     for (const key of keys) {
       if (key.startsWith('project:')) {
         const data = await this.indexedDB.get<{
+          preview?: string;
           metadata: { name: string; modifiedAt: number };
         }>(key);
 
@@ -146,7 +160,8 @@ export class StorageManager {
           projects.push({
             id: key.replace('project:', ''),
             name: data.metadata.name,
-            modifiedAt: data.metadata.modifiedAt
+            modifiedAt: data.metadata.modifiedAt,
+            preview: data.preview
           });
         }
       }

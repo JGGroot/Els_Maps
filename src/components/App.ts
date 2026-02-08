@@ -1,13 +1,13 @@
 import { Point } from 'fabric';
-import { CanvasEngine } from '@/canvas';
+import { CanvasEngine, canvasLockManager } from '@/canvas';
 import { GestureManager, type GestureManagerCallbacks } from '@/gestures';
 import { ToolManager, type ToolManagerCallbacks } from '@/tools';
 import { ToolType, type ActionButtonMode } from '@/types';
 import { isMobileDevice, historyManager, snapManager } from '@/utils';
 import { MainLayout } from './layout/MainLayout';
-import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, type EditActionCallbacks } from './layout/DesktopSidebar';
+import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, type EditActionCallbacks, type CanvasLockCallbacks } from './layout/DesktopSidebar';
 import { MobileToolbar, type StrokeColorCallbacks as MobileStrokeColorCallbacks } from './layout/MobileToolbar';
-import { PropertiesPanel } from './layout/PropertiesPanel';
+import { PropertiesPanel, type ProjectCallbacks } from './layout/PropertiesPanel';
 import { BottomSheet } from './layout/BottomSheet';
 import { CanvasContainer } from './canvas/CanvasContainer';
 import { Reticle } from './canvas/Reticle';
@@ -15,6 +15,7 @@ import { ActionButton } from './controls/ActionButton';
 import { ImportManager } from '@/import';
 import { ExportManager } from '@/export';
 import { ClipboardManager } from '@/import';
+import { StorageManager } from '@/storage';
 import { ExportFormat, type ExportOptions } from '@/types';
 
 export class App {
@@ -35,15 +36,18 @@ export class App {
   private importManager: ImportManager;
   private exportManager: ExportManager;
   private clipboardManager: ClipboardManager;
+  private storageManager: StorageManager;
 
   private spacePanning: boolean = false;
   private panStartPoint: Point | null = null;
+  private currentProjectId: string | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
     this.importManager = new ImportManager();
     this.exportManager = new ExportManager();
     this.clipboardManager = new ClipboardManager();
+    this.storageManager = new StorageManager();
   }
 
   async init(): Promise<void> {
@@ -56,6 +60,20 @@ export class App {
     if (canvas) {
       this.clipboardManager.setCanvas(canvas);
       historyManager.setCanvas(canvas);
+      canvasLockManager.setCanvas(canvas);
+      await this.storageManager.init(canvas);
+
+      // Check for autosave and offer to restore
+      const hasAutosave = await this.storageManager.hasAutosave();
+      if (hasAutosave) {
+        const restore = confirm('Found an autosaved session. Would you like to restore it?');
+        if (restore) {
+          await this.storageManager.loadAutosave();
+        }
+      }
+
+      // Start autosave
+      this.storageManager.startAutosave();
     }
 
     this.setupToolManager();
@@ -177,6 +195,11 @@ export class App {
     canvasEl.addEventListener('mousedown', (e) => {
       const canvas = this.engine?.getCanvas();
       if (!canvas) return;
+
+      // Blur any focused buttons/inputs to prevent spacebar triggering them
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
 
       // Handle spacebar panning
       if (handleSpacePanStart(e)) return;
@@ -308,6 +331,7 @@ export class App {
       onImport: () => this.handleImport(),
       onExportPNG: () => this.handleExportPNG(),
       onExportJPG: () => this.handleExportJPG(),
+      onExportPDF: () => this.handleExportPDF(),
       onCopyToClipboard: () => this.handleCopyToClipboard()
     };
 
@@ -329,6 +353,24 @@ export class App {
       }
     });
     this.desktopSidebar.setSnapEnabled(snapManager.isEnabled());
+
+    // Set up canvas lock callbacks
+    const canvasLockCallbacks: CanvasLockCallbacks = {
+      onCanvasLockToggle: (enabled: boolean) => {
+        canvasLockManager.setAutoLockEnabled(enabled);
+      },
+      onUnlockCanvas: () => {
+        canvasLockManager.unlock();
+      },
+      isCanvasLocked: () => canvasLockManager.isLocked()
+    };
+    this.desktopSidebar.setCanvasLockCallbacks(canvasLockCallbacks);
+
+    // Subscribe to canvas lock changes
+    canvasLockManager.subscribe((state) => {
+      this.desktopSidebar?.updateCanvasLockStatus(state.locked);
+    });
+
     this.mobileToolbar.setFileCallbacks(fileCallbacks);
 
     // Set up mobile stroke color callbacks
@@ -388,6 +430,9 @@ export class App {
       },
       onImageLockChange: (locked: boolean) => {
         this.updateSelectedObjectLock(locked);
+      },
+      onLockCanvasToImage: () => {
+        this.lockCanvasToSelectedImage();
       }
     };
 
@@ -395,6 +440,17 @@ export class App {
       this.layout.getElement(),
       propertyCallbacks
     );
+
+    // Set up project callbacks
+    const projectCallbacks: ProjectCallbacks = {
+      onNewProject: () => this.newProject(),
+      onSaveProject: (name: string) => this.saveProject(name),
+      onLoadProject: (id: string) => this.loadProject(id),
+      onDeleteProject: (id: string) => this.deleteProject(id),
+      onListProjects: () => this.listProjects(),
+      getCurrentProjectId: () => this.getCurrentProjectId()
+    };
+    this.propertiesPanel.setProjectCallbacks(projectCallbacks);
 
     this.bottomSheet = new BottomSheet(
       this.layout.getElement(),
@@ -438,7 +494,7 @@ export class App {
     // Create file input element
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*,.json';
+    input.accept = 'image/*,.json,.pdf,application/pdf';
     
     input.onchange = async (e: Event) => {
       const files = (e.target as HTMLInputElement).files;
@@ -468,6 +524,13 @@ export class App {
     const canvas = this.engine?.getCanvas();
     if (!canvas) return;
 
+    // Use locked region if canvas is locked
+    if (canvasLockManager.isLocked()) {
+      const dataUrl = canvasLockManager.toDataURL({ format: 'png', quality: 1, multiplier: 4 });
+      this.downloadDataUrl(dataUrl, 'elmap-export.png');
+      return;
+    }
+
     const options: ExportOptions = {
       format: ExportFormat.PNG,
       quality: 1,
@@ -481,10 +544,30 @@ export class App {
     const canvas = this.engine?.getCanvas();
     if (!canvas) return;
 
+    // Use locked region if canvas is locked
+    if (canvasLockManager.isLocked()) {
+      const dataUrl = canvasLockManager.toDataURL({ format: 'jpeg', quality: 0.95, multiplier: 4 });
+      this.downloadDataUrl(dataUrl, 'elmap-export.jpg');
+      return;
+    }
+
     const options: ExportOptions = {
       format: ExportFormat.JPEG,
       quality: 0.95,
       scale: 4
+    };
+
+    await this.exportManager.export(canvas, options, 'elmap-export');
+  };
+
+  private handleExportPDF = async (): Promise<void> => {
+    const canvas = this.engine?.getCanvas();
+    if (!canvas) return;
+
+    const options: ExportOptions = {
+      format: ExportFormat.PDF,
+      quality: 1,
+      scale: 2
     };
 
     await this.exportManager.export(canvas, options, 'elmap-export');
@@ -495,14 +578,17 @@ export class App {
       const canvas = this.engine?.getCanvas();
       if (!canvas) return;
 
-      const dataUrl = canvas.toDataURL({
-        format: 'png',
-        quality: 1,
-        multiplier: 4
-      });
+      // Use locked region if canvas is locked
+      const dataUrl = canvasLockManager.isLocked()
+        ? canvasLockManager.toDataURL({ format: 'png', quality: 1, multiplier: 4 })
+        : canvas.toDataURL({
+            format: 'png',
+            quality: 1,
+            multiplier: 4
+          });
 
-      const response = await fetch(dataUrl);
-      const blob = await response.blob();
+      // Convert data URL to blob synchronously to avoid focus issues
+      const blob = this.dataUrlToBlob(dataUrl);
 
       await navigator.clipboard.write([
         new ClipboardItem({
@@ -515,6 +601,26 @@ export class App {
       console.error('Clipboard copy error:', error);
     }
   };
+
+  private dataUrlToBlob(dataUrl: string): Blob {
+    const parts = dataUrl.split(',');
+    const mime = parts[0].match(/:(.*?);/)?.[1] || 'image/png';
+    const binary = atob(parts[1]);
+    const array = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      array[i] = binary.charCodeAt(i);
+    }
+    return new Blob([array], { type: mime });
+  }
+
+  private downloadDataUrl(dataUrl: string, filename: string): void {
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 
   private updateSelectedObjectProperty(property: string, value: unknown): void {
     const canvas = this.engine?.getCanvas();
@@ -547,7 +653,23 @@ export class App {
     canvas.requestRenderAll();
   }
 
+  private lockCanvasToSelectedImage(): void {
+    const canvas = this.engine?.getCanvas();
+    if (!canvas) return;
+
+    const activeObject = canvas.getActiveObject();
+    if (!activeObject || activeObject.type !== 'image') return;
+
+    // Lock the canvas to the selected image
+    canvasLockManager.lockToImage(activeObject as any);
+
+    // Also enable auto-lock and update the sidebar checkbox
+    canvasLockManager.setAutoLockEnabled(true);
+    this.desktopSidebar?.setCanvasLockEnabled(true);
+  }
+
   destroy(): void {
+    this.storageManager?.dispose();
     this.gestureManager?.dispose();
     this.engine?.dispose();
     this.layout?.destroy();
@@ -557,5 +679,50 @@ export class App {
     this.bottomSheet?.destroy();
     this.reticle?.destroy();
     this.actionButton?.destroy();
+  }
+
+  // Project management methods
+  async saveProject(name: string): Promise<boolean> {
+    const id = this.currentProjectId ?? `project-${Date.now()}`;
+    const success = await this.storageManager.saveProject(id, name);
+    if (success) {
+      this.currentProjectId = id;
+    }
+    return success;
+  }
+
+  async loadProject(id: string): Promise<boolean> {
+    const success = await this.storageManager.loadProject(id);
+    if (success) {
+      this.currentProjectId = id;
+      historyManager.clear();
+    }
+    return success;
+  }
+
+  async listProjects(): Promise<Array<{ id: string; name: string; modifiedAt: number }>> {
+    return this.storageManager.listProjects();
+  }
+
+  async deleteProject(id: string): Promise<boolean> {
+    const success = await this.storageManager.deleteProject(id);
+    if (success && this.currentProjectId === id) {
+      this.currentProjectId = null;
+    }
+    return success;
+  }
+
+  async newProject(): Promise<void> {
+    const canvas = this.engine?.getCanvas();
+    if (canvas) {
+      canvas.clear();
+      historyManager.clear();
+      this.currentProjectId = null;
+      await this.storageManager.clearAutosave();
+    }
+  }
+
+  getCurrentProjectId(): string | null {
+    return this.currentProjectId;
   }
 }

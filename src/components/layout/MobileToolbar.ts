@@ -7,6 +7,7 @@ export interface FileActionCallbacks {
   onImport: () => void;
   onExportPNG: () => void;
   onExportJPG: () => void;
+  onExportPDF: () => void;
   onCopyToClipboard: () => void;
 }
 
@@ -236,6 +237,16 @@ export class MobileToolbar {
       closeMenu();
     });
     menu.appendChild(exportJpgBtn);
+
+    // Export PDF button
+    const exportPdfBtn = document.createElement('button');
+    exportPdfBtn.className = 'w-full text-left px-4 py-2 text-white hover:bg-charcoal-light transition-colors border-b border-border flex items-center gap-2';
+    exportPdfBtn.innerHTML = '<span class="icon-export"></span><span>Export PDF</span>';
+    exportPdfBtn.addEventListener('click', () => {
+      this.fileCallbacks?.onExportPDF();
+      closeMenu();
+    });
+    menu.appendChild(exportPdfBtn);
 
     // Copy to clipboard button
     const copyBtn = document.createElement('button');

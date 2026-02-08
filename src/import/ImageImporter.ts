@@ -1,5 +1,6 @@
 import { FabricImage, type Canvas } from 'fabric';
 import type { ImportOptions } from '@/types';
+import { canvasLockManager } from '@/canvas';
 
 export class ImageImporter {
   async import(
@@ -26,6 +27,11 @@ export class ImageImporter {
       canvas.add(img);
       canvas.setActiveObject(img);
       canvas.requestRenderAll();
+
+      // Lock canvas to this image if auto-lock is enabled
+      if (canvasLockManager.isAutoLockEnabled()) {
+        canvasLockManager.lockToImage(img);
+      }
 
       return true;
     } catch (error) {
