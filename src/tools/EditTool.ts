@@ -1,5 +1,5 @@
 import { Circle, Path, Polyline, Point } from 'fabric';
-import type { FabricObject } from 'fabric';
+import type { FabricObject, TMat2D } from 'fabric';
 import { ToolType } from '@/types';
 import type { TouchPoint } from '@/types';
 import { historyManager } from '@/utils';
@@ -858,7 +858,7 @@ export class EditTool extends BaseTool {
   }
 
   private getPointInParentPlane(
-    obj: { pathOffset?: { x: number; y: number } | Point; calcOwnMatrix: () => number[] },
+    obj: { pathOffset?: { x: number; y: number } | Point; calcOwnMatrix: () => TMat2D },
     point: Point | { x: number; y: number }
   ): Point {
     const offsetValue = obj.pathOffset ?? { x: 0, y: 0 };
