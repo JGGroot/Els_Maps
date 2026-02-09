@@ -210,6 +210,31 @@ export class StorageManager {
     return this.indexedDB.remove(`project:${id}`);
   }
 
+  async renameProject(id: string, name: string): Promise<boolean> {
+    try {
+      const data = await this.indexedDB.get<{
+        canvas: object;
+        lockState?: ReturnType<typeof canvasLockManager.getLockedState>;
+        preview?: string;
+        metadata: { name: string; createdAt: number; modifiedAt: number };
+      }>(`project:${id}`);
+
+      if (!data) return false;
+
+      data.metadata = {
+        ...data.metadata,
+        name,
+        modifiedAt: Date.now()
+      };
+
+      await this.indexedDB.set(`project:${id}`, data);
+      return true;
+    } catch (error) {
+      console.error('Rename project failed:', error);
+      return false;
+    }
+  }
+
   dispose(): void {
     this.stopAutosave();
     this.canvas = null;

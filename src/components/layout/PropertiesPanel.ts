@@ -16,6 +16,7 @@ export interface PropertiesPanelCallbacks {
 export interface ProjectCallbacks {
   onNewProject: () => Promise<void>;
   onSaveProject: (name: string) => Promise<boolean>;
+  onRenameProject?: (id: string, name: string) => Promise<boolean>;
   onLoadProject: (id: string) => Promise<boolean>;
   onDeleteProject: (id: string) => Promise<boolean>;
   onListProjects: () => Promise<Array<{ id: string; name: string; modifiedAt: number; preview?: string }>>;
@@ -232,21 +233,36 @@ export class PropertiesPanel {
 
       row.appendChild(info);
 
-      // Load button
-      row.addEventListener('click', async (e) => {
-        if ((e.target as HTMLElement).closest('.delete-btn')) return;
-        const success = await this.projectCallbacks?.onLoadProject(project.id);
-        if (success) {
-          this.showToast('Project loaded!');
-          this.refreshProjectsList();
-        }
-      });
+      const actions = document.createElement('div');
+      actions.className = 'flex items-center gap-1';
 
-      // Delete button
+      const editBtn = document.createElement('button');
+      editBtn.className = 'edit-btn p-1 text-textMuted hover:text-foreground transition-colors';
+      editBtn.title = 'Rename project';
+      editBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+        </svg>
+      `;
+      editBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await this.renameProject(project);
+      });
+      actions.appendChild(editBtn);
+
       const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'delete-btn ml-2 p-1 text-textMuted hover:text-red-500 transition-colors';
-      deleteBtn.innerHTML = '&times;';
+      deleteBtn.className = 'delete-btn p-1 text-textMuted hover:text-red-500 transition-colors';
       deleteBtn.title = 'Delete project';
+      deleteBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6"/>
+          <path d="M14 11v6"/>
+          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+      `;
       deleteBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const confirmed = this.confirmModal
@@ -262,7 +278,20 @@ export class PropertiesPanel {
         await this.projectCallbacks?.onDeleteProject(project.id);
         this.refreshProjectsList();
       });
-      row.appendChild(deleteBtn);
+      actions.appendChild(deleteBtn);
+
+      row.appendChild(actions);
+
+      // Load button
+      row.addEventListener('click', async (e) => {
+        if ((e.target as HTMLElement).closest('.delete-btn')) return;
+        if ((e.target as HTMLElement).closest('.edit-btn')) return;
+        const success = await this.projectCallbacks?.onLoadProject(project.id);
+        if (success) {
+          this.showToast('Project loaded!');
+          this.refreshProjectsList();
+        }
+      });
 
       listContainer.appendChild(row);
     });
@@ -293,6 +322,21 @@ export class PropertiesPanel {
       button.textContent = originalText;
       button.classList.remove('is-saved');
     }, 1200);
+  }
+
+  private async renameProject(project: { id: string; name: string }): Promise<void> {
+    if (!this.projectCallbacks?.onRenameProject) return;
+
+    const nextName = prompt('Rename project:', project.name);
+    if (!nextName) return;
+    const trimmed = nextName.trim();
+    if (!trimmed || trimmed === project.name) return;
+
+    const success = await this.projectCallbacks.onRenameProject(project.id, trimmed);
+    if (success) {
+      this.showToast('Project renamed!');
+      this.refreshProjectsList();
+    }
   }
 
   private async showProjectsModal(): Promise<void> {
@@ -369,9 +413,57 @@ export class PropertiesPanel {
 
       sortedProjects.forEach((project) => {
         const card = document.createElement('div');
-        card.className = `bg-charcoal rounded-lg overflow-hidden cursor-pointer transition-all hover:ring-2 hover:ring-accent ${
+        card.className = `group bg-charcoal rounded-lg overflow-hidden cursor-pointer transition-all hover:ring-2 hover:ring-accent relative ${
           project.id === currentId ? 'ring-2 ring-accent' : ''
         }`;
+
+        const actions = document.createElement('div');
+        actions.className = 'absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity';
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'edit-btn p-1 rounded bg-surface/80 border border-border text-textMuted hover:text-foreground transition-colors';
+        editBtn.title = 'Rename project';
+        editBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"/>
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+          </svg>
+        `;
+        editBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await this.renameProject(project);
+        });
+        actions.appendChild(editBtn);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn p-1 rounded bg-surface/80 border border-border text-textMuted hover:text-red-500 transition-colors';
+        deleteBtn.title = 'Delete project';
+        deleteBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6"/>
+            <path d="M14 11v6"/>
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+          </svg>
+        `;
+        deleteBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const confirmed = this.confirmModal
+            ? await this.confirmModal.open({
+                title: 'Delete project?',
+                message: `Delete "${project.name}"? This cannot be undone.`,
+                confirmLabel: 'Delete',
+                cancelLabel: 'Cancel',
+                tone: 'danger'
+              })
+            : confirm(`Delete "${project.name}"?`);
+          if (!confirmed) return;
+          await this.projectCallbacks?.onDeleteProject(project.id);
+          this.refreshProjectsList();
+        });
+        actions.appendChild(deleteBtn);
+        card.appendChild(actions);
 
         const preview = document.createElement('div');
         preview.className = 'aspect-video bg-charcoal-dark flex items-center justify-center';

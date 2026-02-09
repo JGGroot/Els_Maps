@@ -465,6 +465,7 @@ export class App {
         await this.newProject();
       },
       onSaveProject: (name: string) => this.saveProject(name),
+      onRenameProject: (id: string, name: string) => this.renameProject(id, name),
       onLoadProject: async (id: string) => {
         const proceed = await this.handleUnsavedBeforeOpen();
         if (!proceed) return false;
@@ -751,6 +752,10 @@ export class App {
       this.currentProjectId = null;
     }
     return success;
+  }
+
+  async renameProject(id: string, name: string): Promise<boolean> {
+    return this.storageManager.renameProject(id, name);
   }
 
   async newProject(): Promise<void> {
