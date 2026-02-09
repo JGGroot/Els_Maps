@@ -12,6 +12,34 @@ interface EditablePoint {
   segmentIndex?: number;
 }
 
+interface InteractionState {
+  selectable: boolean;
+  evented: boolean;
+  hasControls: boolean;
+  hasBorders: boolean;
+  lockMovementX: boolean;
+  lockMovementY: boolean;
+  lockScalingX: boolean;
+  lockScalingY: boolean;
+  lockRotation: boolean;
+}
+
+const EDIT_MARKER_STYLE = {
+  anchor: {
+    radius: 7,
+    strokeWidth: 2,
+    fill: '#4a9eff',
+    stroke: '#ffffff'
+  },
+  control: {
+    radius: 5,
+    strokeWidth: 1,
+    fill: '#ff9f4a',
+    stroke: '#ffffff'
+  },
+  hitPadding: 6
+};
+
 export class EditTool extends BaseTool {
   type = ToolType.EDIT;
   name = 'Edit';
@@ -23,6 +51,12 @@ export class EditTool extends BaseTool {
   private isDragging: boolean = false;
   private hasChanges: boolean = false;
   private editedSinceSelect: boolean = false;
+  private lastZoom: number = 1;
+  private cursorIsPointer: boolean = false;
+  private upperCanvasEl: HTMLCanvasElement | null = null;
+  private suppressSelectionClear: boolean = false;
+  private lastPointer: Point | null = null;
+  private interactionStates: Map<FabricObject, InteractionState> = new Map();
   private priorObjectState: {
     hasBorders: boolean;
     hasControls: boolean;
@@ -34,16 +68,33 @@ export class EditTool extends BaseTool {
   protected setupEventListeners(): void {
     if (!this.canvas) return;
 
-    this.canvas.selection = true;
+    this.canvas.selection = false;
     this.canvas.targetFindTolerance = 8;
-    this.canvas.forEachObject((obj) => {
-      obj.selectable = true;
-      obj.evented = true;
-    });
+    this.canvas.skipTargetFind = false;
+    this.captureInteractionStates();
+    this.applyEditInteractionState();
 
     this.canvas.on('selection:created', this.handleSelectionChange);
     this.canvas.on('selection:updated', this.handleSelectionChange);
     this.canvas.on('selection:cleared', this.handleSelectionCleared);
+    this.canvas.on('object:added', this.handleObjectAdded);
+    this.canvas.on('object:removed', this.handleObjectRemoved);
+    this.canvas.on('after:render', this.handleAfterRender);
+
+    this.upperCanvasEl = (this.canvas as any).upperCanvasEl ?? null;
+    if (this.upperCanvasEl) {
+      this.upperCanvasEl.addEventListener('mousedown', this.handlePointerCapture, { capture: true });
+    }
+
+    this.lastZoom = this.canvas.getZoom();
+
+    const activeObj = this.canvas.getActiveObject();
+    if (activeObj && (activeObj instanceof Path || activeObj instanceof Polyline)) {
+      this.selectObject(activeObj);
+    } else {
+      this.canvas.discardActiveObject();
+      this.canvas.requestRenderAll();
+    }
   }
 
   protected cleanupEventListeners(): void {
@@ -52,10 +103,38 @@ export class EditTool extends BaseTool {
     this.canvas.off('selection:created', this.handleSelectionChange);
     this.canvas.off('selection:updated', this.handleSelectionChange);
     this.canvas.off('selection:cleared', this.handleSelectionCleared);
+    this.canvas.off('object:added', this.handleObjectAdded);
+    this.canvas.off('object:removed', this.handleObjectRemoved);
+    this.canvas.off('after:render', this.handleAfterRender);
 
     this.clearEditPoints();
+    this.setCursorPointer(false);
+    this.restoreInteractionStates();
     this.selectedObject = null;
+
+    if (this.upperCanvasEl) {
+      this.upperCanvasEl.removeEventListener('mousedown', this.handlePointerCapture, { capture: true });
+      this.upperCanvasEl = null;
+    }
   }
+
+  private handlePointerCapture = (event: MouseEvent): void => {
+    if (!this.canvas || event.button !== 0) return;
+
+    const pointer = this.canvas.getPointer(event);
+    const point = new Point(pointer.x, pointer.y);
+    this.lastPointer = point;
+    const preferType = event.altKey ? 'control' : 'anchor';
+    const clickedPoint = this.findPointAtPosition(point, preferType);
+    if (!clickedPoint) return;
+
+    this.activePoint = clickedPoint;
+    this.isDragging = true;
+    this.suppressSelectionClear = true;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+  };
 
   private handleSelectionChange = (): void => {
     if (!this.canvas) return;
@@ -69,59 +148,90 @@ export class EditTool extends BaseTool {
     }
   };
 
-  private handleSelectionCleared = (): void => {
+  private handleSelectionCleared = (event?: { e?: Event }): void => {
+    const shouldRestore =
+      this.suppressSelectionClear || this.isPointerOverEditPoint(event?.e);
+
+    if (shouldRestore && this.selectedObject && this.canvas) {
+      this.suppressSelectionClear = false;
+      this.canvas.setActiveObject(this.selectedObject);
+      this.canvas.requestRenderAll();
+      return;
+    }
     this.clearEditPoints();
     this.selectedObject = null;
   };
 
-  onMouseDown(point: Point, event: MouseEvent): void {
-    if (event.button !== 0) return;
+  private handleObjectAdded = (event: { target?: FabricObject }): void => {
+    const added = event?.target;
+    if (!added || (added as any)._editMarker) return;
 
-    // Check if clicking on an edit point first
-    const clickedPoint = this.findPointAtPosition(point);
-    if (clickedPoint) {
-      this.activePoint = clickedPoint;
-      this.isDragging = true;
-      event.stopPropagation();
+    if (!this.interactionStates.has(added)) {
+      this.interactionStates.set(added, this.captureInteractionState(added));
+    }
+
+    this.applyEditInteractionState(added);
+  };
+
+  private handleObjectRemoved = (event: { target?: FabricObject }): void => {
+    const removed = event?.target;
+    if (!removed) return;
+
+    if (this.interactionStates.has(removed)) {
+      this.interactionStates.delete(removed);
+    }
+
+    if ((removed as any)._editMarker) {
+      this.editPoints = this.editPoints.filter((ep) => ep.marker !== removed);
       return;
     }
 
-    // Stop propagation to prevent canvas selection
-    event.stopPropagation();
-
-    // Only select if we don't already have points loaded
-    if (this.editPoints.length === 0) {
-      let clickedObject: FabricObject | null = null;
-
-      const target = (this.canvas as any).findTarget?.(event) as FabricObject | undefined;
-      if (target && (target instanceof Path || target instanceof Polyline)) {
-        clickedObject = target;
-      } else {
-        // Fallback: manual hit test
-        const objects = this.canvas?.getObjects() ?? [];
-
-        for (let i = objects.length - 1; i >= 0; i--) {
-          const obj = objects[i];
-          if (!obj.selectable || !(obj instanceof Path || obj instanceof Polyline)) continue;
-
-          if (obj.containsPoint?.(new Point(point.x, point.y))) {
-            clickedObject = obj;
-            break;
-          }
-        }
-      }
-      
-      if (clickedObject && (clickedObject instanceof Path || clickedObject instanceof Polyline)) {
-        this.canvas?.setActiveObject(clickedObject);
-        this.selectObject(clickedObject);
-      }
+    if (removed === this.selectedObject) {
+      this.activePoint = null;
+      this.isDragging = false;
+      this.clearEditPoints(false);
+      this.selectedObject = null;
     }
+  };
+
+  private handleAfterRender = (): void => {
+    if (!this.canvas || this.editPoints.length === 0) return;
+    const zoom = this.canvas.getZoom();
+    if (Math.abs(zoom - this.lastZoom) < 0.0001) return;
+    this.lastZoom = zoom;
+    this.updateMarkerSizes();
+  };
+
+  onMouseDown(point: Point, event: MouseEvent): void {
+    if (event.button !== 0) return;
+    this.suppressSelectionClear = false;
+    this.lastPointer = point;
+
+    // Check if clicking on an edit point first
+    const preferType = event.altKey ? 'control' : 'anchor';
+    const clickedPoint = this.findPointAtPosition(point, preferType);
+    if (clickedPoint) {
+      this.activePoint = clickedPoint;
+      this.isDragging = true;
+      this.suppressSelectionClear = true;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      return;
+    }
+
+    // Let Fabric handle selection when not clicking a node
   }
 
   onMouseMove(point: Point, _event: MouseEvent): void {
+    this.lastPointer = point;
     if (this.isDragging && this.activePoint && this.selectedObject) {
       this.movePoint(this.activePoint, point);
+      return;
     }
+
+    const hovered = this.findPointAtPosition(point) !== null;
+    this.setCursorPointer(hovered);
   }
 
   onMouseUp(_point: Point, _event: MouseEvent): void {
@@ -134,11 +244,14 @@ export class EditTool extends BaseTool {
         this.hasChanges = false;
       }
     }
+    this.suppressSelectionClear = false;
+    this.setCursorPointer(false);
   }
 
   onTouchStart(point: TouchPoint): void {
     const fabricPoint = new Point(point.x, point.y);
-    const clickedPoint = this.findPointAtPosition(fabricPoint);
+    this.lastPointer = fabricPoint;
+    const clickedPoint = this.findPointAtPosition(fabricPoint, 'anchor');
 
     if (clickedPoint) {
       this.activePoint = clickedPoint;
@@ -149,6 +262,7 @@ export class EditTool extends BaseTool {
   onTouchMove(point: TouchPoint): void {
     if (this.isDragging && this.activePoint && this.selectedObject) {
       const fabricPoint = new Point(point.x, point.y);
+      this.lastPointer = fabricPoint;
       this.movePoint(this.activePoint, fabricPoint);
     }
   }
@@ -199,6 +313,8 @@ export class EditTool extends BaseTool {
       this.createPathEditPoints(obj);
     }
 
+    this.updateMarkerSizes(false);
+    this.bringEditPointsToFront();
     this.canvas?.requestRenderAll();
   }
 
@@ -220,19 +336,13 @@ export class EditTool extends BaseTool {
       const marker = new Circle({
         left: canvasPoint.x,
         top: canvasPoint.y,
-        radius: 7,
-        fill: '#4a9eff',
-        stroke: '#ffffff',
-        strokeWidth: 2,
-        originX: 'center',
-        originY: 'center',
-        selectable: false,
-        evented: false,
-        hoverCursor: 'pointer',
-        angle: 0,
-        scaleX: 1,
-        scaleY: 1
+        ...this.getMarkerDefaults('anchor'),
+        angle: 0
       });
+
+      (marker as any)._editMarker = true;
+      (marker as any).excludeFromExport = true;
+      (marker as any).isHelper = true;
 
       this.canvas!.add(marker);
 
@@ -333,15 +443,12 @@ export class EditTool extends BaseTool {
     const marker = new Circle({
       left: point.x,
       top: point.y,
-      radius: 7,
-      fill: '#4a9eff',
-      stroke: '#ffffff',
-      strokeWidth: 2,
-      originX: 'center',
-      originY: 'center',
-      selectable: false,
-      evented: false
+      ...this.getMarkerDefaults('anchor')
     });
+
+    (marker as any)._editMarker = true;
+    (marker as any).excludeFromExport = true;
+    (marker as any).isHelper = true;
 
     this.editPoints.push({
       marker,
@@ -359,15 +466,12 @@ export class EditTool extends BaseTool {
     const marker = new Circle({
       left: point.x,
       top: point.y,
-      radius: 5,
-      fill: '#ff9f4a',
-      stroke: '#ffffff',
-      strokeWidth: 1,
-      originX: 'center',
-      originY: 'center',
-      selectable: false,
-      evented: false
+      ...this.getMarkerDefaults('control')
     });
+
+    (marker as any)._editMarker = true;
+    (marker as any).excludeFromExport = true;
+    (marker as any).isHelper = true;
 
     this.editPoints.push({
       marker,
@@ -380,6 +484,69 @@ export class EditTool extends BaseTool {
     (marker as any)._cpIndex = cpIndex;
 
     this.canvas.add(marker);
+  }
+
+  private getMarkerDefaults(type: 'anchor' | 'control'): {
+    radius: number;
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    originX: 'center';
+    originY: 'center';
+    selectable: false;
+    evented: false;
+    objectCaching: false;
+  } {
+    const zoomScale = this.getMarkerScale();
+    const style = type === 'anchor' ? EDIT_MARKER_STYLE.anchor : EDIT_MARKER_STYLE.control;
+
+    return {
+      radius: style.radius * zoomScale,
+      fill: style.fill,
+      stroke: style.stroke,
+      strokeWidth: style.strokeWidth * zoomScale,
+      originX: 'center',
+      originY: 'center',
+      selectable: false,
+      evented: false,
+      objectCaching: false
+    };
+  }
+
+  private setCursorPointer(enabled: boolean): void {
+    if (!this.canvas || this.cursorIsPointer === enabled) return;
+    const upperCanvas = (this.canvas as any).upperCanvasEl as HTMLCanvasElement | undefined;
+    if (!upperCanvas) return;
+    upperCanvas.style.cursor = enabled ? 'pointer' : '';
+    this.cursorIsPointer = enabled;
+  }
+
+  private isPointerOverEditPoint(event?: Event): boolean {
+    const point = this.getPointFromEvent(event) ?? this.lastPointer;
+    if (!point) return false;
+    return this.findPointAtPosition(point) !== null;
+  }
+
+  private getPointFromEvent(event?: Event): Point | null {
+    if (!this.canvas || !event) return null;
+
+    if (event instanceof MouseEvent) {
+      const pointer = this.canvas.getPointer(event);
+      return new Point(pointer.x, pointer.y);
+    }
+
+    const anyEvent = event as TouchEvent;
+    const touch = anyEvent.touches?.[0] ?? anyEvent.changedTouches?.[0];
+    if (touch) {
+      const fakeMouseEvent = {
+        clientX: touch.clientX,
+        clientY: touch.clientY
+      } as MouseEvent;
+      const pointer = this.canvas.getPointer(fakeMouseEvent);
+      return new Point(pointer.x, pointer.y);
+    }
+
+    return null;
   }
 
   private transformPoint(x: number, y: number, matrix: number[]): { x: number; y: number } {
@@ -401,20 +568,136 @@ export class EditTool extends BaseTool {
     };
   }
 
-  private findPointAtPosition(pos: Point): EditablePoint | null {
-    const threshold = 20;
+  private findPointAtPosition(
+    pos: Point,
+    preferType: 'anchor' | 'control' = 'anchor'
+  ): EditablePoint | null {
+    if (!this.canvas) return null;
+    const zoom = this.canvas.getZoom();
+    const hitPadding = EDIT_MARKER_STYLE.hitPadding / zoom;
+    const candidates: Array<{ point: EditablePoint; dist: number }> = [];
 
     for (const ep of this.editPoints) {
       const mx = ep.marker.left ?? 0;
       const my = ep.marker.top ?? 0;
+      const radius = (ep.marker.radius ?? 0) * (ep.marker.scaleX ?? 1);
+      const threshold = radius + hitPadding;
       const dist = Math.hypot(pos.x - mx, pos.y - my);
 
-      if (dist < threshold) {
-        return ep;
+      if (dist <= threshold) {
+        candidates.push({ point: ep, dist });
       }
     }
 
-    return null;
+    if (candidates.length === 0) return null;
+
+    const preferred = candidates.filter((candidate) => candidate.point.type === preferType);
+    const list = preferred.length > 0 ? preferred : candidates;
+
+    return list.reduce((closest, candidate) => (
+      candidate.dist < closest.dist ? candidate : closest
+    )).point;
+  }
+
+  private getMarkerScale(): number {
+    const zoom = this.canvas?.getZoom() ?? 1;
+    return 1 / zoom;
+  }
+
+  private updateMarkerSizes(requestRender: boolean = true): void {
+    if (!this.canvas || this.editPoints.length === 0) return;
+    const zoomScale = this.getMarkerScale();
+
+    for (const ep of this.editPoints) {
+      const style = ep.type === 'anchor' ? EDIT_MARKER_STYLE.anchor : EDIT_MARKER_STYLE.control;
+      ep.marker.set({
+        radius: style.radius * zoomScale,
+        strokeWidth: style.strokeWidth * zoomScale
+      });
+    }
+
+    if (requestRender) {
+      this.canvas.requestRenderAll();
+    }
+  }
+
+  private bringEditPointsToFront(): void {
+    if (!this.canvas) return;
+    for (const ep of this.editPoints) {
+      this.canvas.bringObjectToFront(ep.marker);
+    }
+  }
+
+  private captureInteractionStates(): void {
+    if (!this.canvas) return;
+    this.interactionStates.clear();
+    this.canvas.getObjects().forEach((obj) => {
+      if ((obj as any)._editMarker) return;
+      this.interactionStates.set(obj, this.captureInteractionState(obj));
+    });
+  }
+
+  private captureInteractionState(obj: FabricObject): InteractionState {
+    return {
+      selectable: obj.selectable ?? true,
+      evented: obj.evented ?? true,
+      hasControls: obj.hasControls ?? true,
+      hasBorders: obj.hasBorders ?? true,
+      lockMovementX: obj.lockMovementX ?? false,
+      lockMovementY: obj.lockMovementY ?? false,
+      lockScalingX: obj.lockScalingX ?? false,
+      lockScalingY: obj.lockScalingY ?? false,
+      lockRotation: obj.lockRotation ?? false
+    };
+  }
+
+  private applyEditInteractionState(target?: FabricObject): void {
+    if (!this.canvas) return;
+    const objects = target ? [target] : this.canvas.getObjects();
+
+    objects.forEach((obj) => {
+      if ((obj as any)._editMarker) return;
+      if (obj instanceof Path || obj instanceof Polyline) {
+        obj.set({
+          selectable: true,
+          evented: true,
+          hasControls: false,
+          hasBorders: false,
+          lockMovementX: true,
+          lockMovementY: true,
+          lockScalingX: true,
+          lockScalingY: true,
+          lockRotation: true
+        });
+      } else {
+        obj.set({
+          selectable: false,
+          evented: false,
+          hasControls: false,
+          hasBorders: false
+        });
+      }
+    });
+  }
+
+  private restoreInteractionStates(): void {
+    if (!this.canvas) return;
+    for (const [obj, state] of this.interactionStates) {
+      if (!this.canvas.getObjects().includes(obj)) continue;
+      obj.set({
+        selectable: state.selectable,
+        evented: state.evented,
+        hasControls: state.hasControls,
+        hasBorders: state.hasBorders,
+        lockMovementX: state.lockMovementX,
+        lockMovementY: state.lockMovementY,
+        lockScalingX: state.lockScalingX,
+        lockScalingY: state.lockScalingY,
+        lockRotation: state.lockRotation
+      });
+    }
+    this.interactionStates.clear();
+    this.canvas.requestRenderAll();
   }
 
   private movePoint(editPoint: EditablePoint, newPos: Point): void {
@@ -449,19 +732,33 @@ export class EditTool extends BaseTool {
     const points = polyline.points;
     if (!points || index >= points.length) return;
 
+    const anchorIndex = this.getPolylineAnchorIndex(polyline, index);
+    const anchorBefore = anchorIndex !== null
+      ? this.getPointInParentPlane(polyline, points[anchorIndex])
+      : null;
+
     points[index] = new Point(pos.x, pos.y);
 
     // Force polyline to update
     polyline.set({ points: [...points] });
-    if (typeof (polyline as any)._setPositionDimensions === 'function') {
-      (polyline as any)._setPositionDimensions({});
+    this.updateObjectDimensions(polyline);
+
+    if (anchorBefore) {
+      const anchorAfter = this.getPointInParentPlane(polyline, points[anchorIndex!]);
+      const diff = anchorAfter.subtract(anchorBefore);
+      polyline.left -= diff.x;
+      polyline.top -= diff.y;
     }
     polyline.dirty = true;
     polyline.setCoords();
+    this.syncEditPointsWithObject();
   }
 
   private updatePathPoint(path: Path, editPoint: EditablePoint, pos: { x: number; y: number }): void {
     if (!path.path || editPoint.segmentIndex === undefined) return;
+
+    const anchor = this.getPathAnchor(path, editPoint);
+    const anchorBefore = anchor ? this.getPathAnchorInParentPlane(path, anchor) : null;
 
     const segment = path.path[editPoint.segmentIndex];
     const command = segment[0];
@@ -496,14 +793,157 @@ export class EditTool extends BaseTool {
 
     // Force path to recalculate
     path.set({ path: [...path.path] });
-    if (typeof (path as any)._setPositionDimensions === 'function') {
-      (path as any)._setPositionDimensions({});
+    this.updateObjectDimensions(path);
+
+    if (anchorBefore && anchor) {
+      const anchorAfter = this.getPathAnchorInParentPlane(path, anchor);
+      const diff = anchorAfter.subtract(anchorBefore);
+      path.left -= diff.x;
+      path.top -= diff.y;
     }
     path.dirty = true;
     path.setCoords();
+    this.syncEditPointsWithObject();
   }
 
-  private clearEditPoints(): void {
+  private updateObjectDimensions(obj: FabricObject): void {
+    if (typeof (obj as any).setDimensions === 'function') {
+      (obj as any).setDimensions();
+    } else if (typeof (obj as any)._setPositionDimensions === 'function') {
+      (obj as any)._setPositionDimensions({});
+    }
+  }
+
+  private getPolylineAnchorIndex(polyline: Polyline, editedIndex: number): number | null {
+    const points = polyline.points ?? [];
+    if (points.length <= 1) return null;
+    if (editedIndex !== 0) return 0;
+    return points.length > 1 ? 1 : null;
+  }
+
+  private getPathAnchor(
+    path: Path,
+    editPoint: EditablePoint
+  ): { segmentIndex: number; xIndex: number; yIndex: number } | null {
+    if (!path.path) return null;
+    const skipSegment = editPoint.type === 'anchor' ? editPoint.segmentIndex : undefined;
+
+    for (let i = 0; i < path.path.length; i++) {
+      if (skipSegment !== undefined && i === skipSegment) continue;
+      const segment = path.path[i];
+      const command = segment[0];
+
+      if (command === 'M' || command === 'L') {
+        return { segmentIndex: i, xIndex: 1, yIndex: 2 };
+      }
+      if (command === 'C') {
+        return { segmentIndex: i, xIndex: 5, yIndex: 6 };
+      }
+      if (command === 'Q') {
+        return { segmentIndex: i, xIndex: 3, yIndex: 4 };
+      }
+    }
+
+    return null;
+  }
+
+  private getPathAnchorInParentPlane(
+    path: Path,
+    anchor: { segmentIndex: number; xIndex: number; yIndex: number }
+  ): Point {
+    const segment = path.path?.[anchor.segmentIndex];
+    const x = (segment?.[anchor.xIndex] as number) ?? 0;
+    const y = (segment?.[anchor.yIndex] as number) ?? 0;
+    return this.getPointInParentPlane(path, new Point(x, y));
+  }
+
+  private getPointInParentPlane(
+    obj: { pathOffset?: { x: number; y: number } | Point; calcOwnMatrix: () => number[] },
+    point: Point | { x: number; y: number }
+  ): Point {
+    const offsetValue = obj.pathOffset ?? { x: 0, y: 0 };
+    const offset = offsetValue instanceof Point ? offsetValue : new Point(offsetValue.x, offsetValue.y);
+    const basePoint = point instanceof Point ? point : new Point(point.x, point.y);
+    return basePoint.subtract(offset).transform(obj.calcOwnMatrix());
+  }
+
+  private syncEditPointsWithObject(): void {
+    if (!this.canvas || !this.selectedObject || this.editPoints.length === 0) return;
+
+    if (this.selectedObject instanceof Polyline) {
+      const polyline = this.selectedObject;
+      const points = polyline.points ?? [];
+      const matrix = polyline.calcTransformMatrix();
+      const pathOffset = (polyline as any).pathOffset ?? { x: 0, y: 0 };
+
+      for (const ep of this.editPoints) {
+        const pt = points[ep.index];
+        if (!pt) continue;
+        const canvasPoint = this.transformPoint(
+          pt.x - pathOffset.x,
+          pt.y - pathOffset.y,
+          matrix
+        );
+        ep.marker.set({ left: canvasPoint.x, top: canvasPoint.y });
+      }
+      return;
+    }
+
+    if (this.selectedObject instanceof Path) {
+      const path = this.selectedObject;
+      if (!path.path) return;
+      const matrix = path.calcTransformMatrix();
+      const pathOffset = (path as any).pathOffset ?? { x: 0, y: 0 };
+
+      for (const ep of this.editPoints) {
+        if (ep.segmentIndex === undefined) continue;
+        const segment = path.path[ep.segmentIndex];
+        if (!segment) continue;
+        const command = segment[0];
+
+        let x: number | null = null;
+        let y: number | null = null;
+
+        if (ep.type === 'anchor') {
+          if (command === 'M' || command === 'L') {
+            x = segment[1] as number;
+            y = segment[2] as number;
+          } else if (command === 'C') {
+            x = segment[5] as number;
+            y = segment[6] as number;
+          } else if (command === 'Q') {
+            x = segment[3] as number;
+            y = segment[4] as number;
+          }
+        } else if (ep.type === 'control') {
+          const cpIndex = (ep.marker as any)._cpIndex ?? 0;
+          if (command === 'C') {
+            if (cpIndex === 0) {
+              x = segment[1] as number;
+              y = segment[2] as number;
+            } else {
+              x = segment[3] as number;
+              y = segment[4] as number;
+            }
+          } else if (command === 'Q') {
+            x = segment[1] as number;
+            y = segment[2] as number;
+          }
+        }
+
+        if (x === null || y === null) continue;
+
+        const canvasPoint = this.transformPoint(
+          x - pathOffset.x,
+          y - pathOffset.y,
+          matrix
+        );
+        ep.marker.set({ left: canvasPoint.x, top: canvasPoint.y });
+      }
+    }
+  }
+
+  private clearEditPoints(restoreObject: boolean = true): void {
     if (!this.canvas) return;
 
     for (const ep of this.editPoints) {
@@ -512,7 +952,7 @@ export class EditTool extends BaseTool {
     this.editPoints = [];
 
     // Restore object controls if there was a selected object
-    if (this.selectedObject) {
+    if (restoreObject && this.selectedObject && this.canvas.getObjects().includes(this.selectedObject)) {
       if (this.editedSinceSelect) {
         // Force full recalculation of bounding box for Polyline/Path
         if (this.selectedObject instanceof Polyline && this.selectedObject.points) {
@@ -522,7 +962,9 @@ export class EditTool extends BaseTool {
           // Re-set path to trigger full recalculation
           this.selectedObject.set({ path: [...this.selectedObject.path] });
         }
-        if (typeof (this.selectedObject as any)._setPositionDimensions === 'function') {
+        if (typeof (this.selectedObject as any).setDimensions === 'function') {
+          (this.selectedObject as any).setDimensions();
+        } else if (typeof (this.selectedObject as any)._setPositionDimensions === 'function') {
           (this.selectedObject as any)._setPositionDimensions({});
         }
         this.selectedObject.setCoords();
