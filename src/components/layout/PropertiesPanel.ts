@@ -6,6 +6,7 @@ export interface PropertiesPanelCallbacks {
   onStrokeWidthChange: (width: number) => void;
   onFillColorChange: (color: string) => void;
   onFontSizeChange: (size: number) => void;
+  onFontFamilyChange: (fontFamily: string) => void;
   onImageLockChange: (locked: boolean) => void;
   onLockCanvasToImage: () => void;
 }
@@ -36,7 +37,7 @@ export class PropertiesPanel {
 
     const header = document.createElement('div');
     header.className = 'p-4 border-b border-border';
-    header.innerHTML = `<h2 class="text-lg font-semibold text-white">Properties</h2>`;
+    header.innerHTML = `<h2 class="text-lg font-semibold text-foreground">Properties</h2>`;
     this.element.appendChild(header);
 
     this.contentEl = document.createElement('div');
@@ -68,7 +69,7 @@ export class PropertiesPanel {
     header.className = 'flex justify-between items-center mb-3';
 
     const label = document.createElement('h2');
-    label.className = 'text-sm text-textMuted cursor-pointer hover:text-white transition-colors flex items-center gap-1';
+    label.className = 'text-sm text-textMuted cursor-pointer hover:text-foreground transition-colors flex items-center gap-1';
     label.innerHTML = 'Projects <span class="text-xs opacity-60">(click for grid view)</span>';
     label.addEventListener('click', () => this.showProjectsModal());
     header.appendChild(label);
@@ -80,7 +81,7 @@ export class PropertiesPanel {
     actionsRow.className = 'flex gap-2 mb-3';
 
     const newBtn = document.createElement('button');
-    newBtn.className = 'flex-1 px-2 py-1.5 bg-charcoal-light hover:bg-charcoal-lighter rounded text-xs text-white transition-colors';
+    newBtn.className = 'flex-1 px-2 py-1.5 bg-charcoal-light hover:bg-charcoal-lighter rounded text-xs text-foreground transition-colors';
     newBtn.textContent = 'New';
     newBtn.addEventListener('click', async () => {
       if (confirm('Start a new project? Unsaved changes will be lost.')) {
@@ -118,7 +119,7 @@ export class PropertiesPanel {
     actionsRow.appendChild(saveBtn);
 
     const saveAsBtn = document.createElement('button');
-    saveAsBtn.className = 'flex-1 px-2 py-1.5 bg-charcoal-light hover:bg-charcoal-lighter rounded text-xs text-white transition-colors';
+    saveAsBtn.className = 'flex-1 px-2 py-1.5 bg-charcoal-light hover:bg-charcoal-lighter rounded text-xs text-foreground transition-colors';
     saveAsBtn.textContent = 'Save As';
     saveAsBtn.addEventListener('click', async () => {
       const name = prompt('Project name:', 'Untitled Project');
@@ -168,7 +169,7 @@ export class PropertiesPanel {
       info.className = 'flex-1 min-w-0';
 
       const name = document.createElement('div');
-      name.className = 'text-white truncate';
+      name.className = 'text-foreground truncate';
       name.textContent = project.name;
       info.appendChild(name);
 
@@ -233,8 +234,8 @@ export class PropertiesPanel {
     const header = document.createElement('div');
     header.className = 'flex justify-between items-center mb-4';
     header.innerHTML = `
-      <h3 class="text-lg font-semibold text-white">All Projects</h3>
-      <button class="close-btn text-textMuted hover:text-white text-2xl">&times;</button>
+      <h3 class="text-lg font-semibold text-foreground">All Projects</h3>
+      <button class="close-btn text-textMuted hover:text-foreground text-2xl">&times;</button>
     `;
     dialog.appendChild(header);
 
@@ -268,7 +269,7 @@ export class PropertiesPanel {
         const info = document.createElement('div');
         info.className = 'p-3';
         info.innerHTML = `
-          <div class="text-white text-sm font-medium truncate">${project.name}</div>
+          <div class="text-foreground text-sm font-medium truncate">${project.name}</div>
           <div class="text-textMuted text-xs">${new Date(project.modifiedAt).toLocaleDateString()} ${new Date(project.modifiedAt).toLocaleTimeString()}</div>
         `;
         card.appendChild(info);
@@ -329,7 +330,7 @@ export class PropertiesPanel {
       row.className = 'flex justify-between items-center';
 
       const keySpan = document.createElement('span');
-      keySpan.className = 'text-white font-mono bg-charcoal px-1 rounded';
+      keySpan.className = 'text-foreground font-mono bg-charcoal px-1 rounded';
       keySpan.textContent = key;
 
       const actionSpan = document.createElement('span');
@@ -368,6 +369,7 @@ export class PropertiesPanel {
     // For text objects, use fill instead of stroke
     const textColor = isText ? ((selectedObject.fill as string) || '#ffffff') : '';
     const fontSize = isText ? ((selectedObject as any).fontSize || 16) : 0;
+    const fontFamily = isText ? ((selectedObject as any).fontFamily || 'IBM Plex Sans') : '';
 
     let html = '<div class="space-y-4">';
 
@@ -381,7 +383,16 @@ export class PropertiesPanel {
         <div>
           <label class="block text-sm text-textMuted mb-2">Font Size</label>
           <input type="range" min="8" max="120" value="${fontSize}" class="w-full" id="font-size"/>
-          <span class="text-sm text-white" id="font-size-value">${fontSize}px</span>
+          <span class="text-sm text-foreground" id="font-size-value">${fontSize}px</span>
+        </div>
+        <div>
+          <label class="block text-sm text-textMuted mb-2">Font Family</label>
+          <select id="font-family" class="w-full bg-charcoal border border-border rounded px-3 py-2 text-foreground text-sm">
+            <option value="IBM Plex Sans" ${fontFamily === 'IBM Plex Sans' ? 'selected' : ''}>IBM Plex Sans</option>
+            <option value="Comic Sans MS" ${fontFamily === 'Comic Sans MS' ? 'selected' : ''}>Comic Sans</option>
+            <option value="Arial" ${fontFamily === 'Arial' ? 'selected' : ''}>Arial</option>
+            <option value="Times New Roman" ${fontFamily === 'Times New Roman' ? 'selected' : ''}>Times New Roman</option>
+          </select>
         </div>
       `;
     } else if (!isImage) {
@@ -394,7 +405,7 @@ export class PropertiesPanel {
         <div>
           <label class="block text-sm text-textMuted mb-2">Stroke Width</label>
           <input type="range" min="1" max="20" value="${strokeWidth}" class="w-full" id="stroke-width"/>
-          <span class="text-sm text-white">${strokeWidth}px</span>
+          <span class="text-sm text-foreground">${strokeWidth}px</span>
         </div>
       `;
     }
@@ -422,6 +433,7 @@ export class PropertiesPanel {
       const fillInput = this.contentEl.querySelector('#fill-color') as HTMLInputElement;
       const fontSizeInput = this.contentEl.querySelector('#font-size') as HTMLInputElement;
       const fontSizeValue = this.contentEl.querySelector('#font-size-value') as HTMLSpanElement;
+      const fontFamilySelect = this.contentEl.querySelector('#font-family') as HTMLSelectElement;
 
       fillInput?.addEventListener('input', (e) => {
         this.callbacks.onFillColorChange((e.target as HTMLInputElement).value);
@@ -431,6 +443,10 @@ export class PropertiesPanel {
         const size = Number((e.target as HTMLInputElement).value);
         this.callbacks.onFontSizeChange(size);
         if (fontSizeValue) fontSizeValue.textContent = `${size}px`;
+      });
+
+      fontFamilySelect?.addEventListener('change', (e) => {
+        this.callbacks.onFontFamilyChange((e.target as HTMLSelectElement).value);
       });
     } else if (!isImage) {
       const colorInput = this.contentEl.querySelector('#stroke-color') as HTMLInputElement;

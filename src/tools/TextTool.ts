@@ -122,7 +122,7 @@ export class TextTool extends BaseTool {
     const text = new IText('', {
       left: point.x,
       top: point.y,
-      fontFamily: 'sans-serif',
+      fontFamily: this.config?.fontFamily ?? 'IBM Plex Sans',
       fontSize: fontSize,
       fill: this.config?.strokeColor ?? '#ffffff',
       stroke: 'transparent',

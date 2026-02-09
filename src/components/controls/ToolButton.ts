@@ -24,7 +24,7 @@ export class ToolButton {
     this.element.className = `
       flex items-center justify-center rounded-lg transition-colors
       hover:bg-charcoal-light
-      ${isActive ? 'bg-accent text-white' : 'bg-transparent text-white'}
+      ${isActive ? 'bg-accent text-white' : 'bg-transparent text-foreground'}
     `;
     this.element.style.cssText = `
       width: ${LAYOUT.minTouchTarget}px;
@@ -105,11 +105,11 @@ export class ToolButton {
 
   setActive(active: boolean): void {
     if (active) {
-      this.element.classList.remove('bg-transparent');
-      this.element.classList.add('bg-accent');
+      this.element.classList.remove('bg-transparent', 'text-foreground');
+      this.element.classList.add('bg-accent', 'text-white');
     } else {
-      this.element.classList.remove('bg-accent');
-      this.element.classList.add('bg-transparent');
+      this.element.classList.remove('bg-accent', 'text-white');
+      this.element.classList.add('bg-transparent', 'text-foreground');
     }
   }
 

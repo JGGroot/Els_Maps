@@ -22,5 +22,6 @@ export const TOOL_DEFAULTS = {
   strokeColor: '#ffffff',
   strokeWidth: 2,
   fillColor: 'transparent',
-  opacity: 1
+  opacity: 1,
+  fontFamily: 'IBM Plex Sans'
 };

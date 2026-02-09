@@ -8,7 +8,7 @@ export default {
           DEFAULT: 'var(--color-bg)',
           light: 'var(--color-bg-light)',
           lighter: 'var(--color-bg-lighter)',
-          dark: '#0d0d0d'
+          dark: 'var(--color-bg-dark)'
         },
         surface: 'var(--color-surface)',
         border: 'var(--color-border)',

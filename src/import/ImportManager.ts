@@ -76,17 +76,17 @@ export class ImportManager {
     dialog.className = 'bg-surface rounded-lg p-6 max-w-sm w-full';
 
     dialog.innerHTML = `
-      <h3 class="text-lg font-semibold text-white mb-4">Select PDF Page</h3>
+      <h3 class="text-lg font-semibold text-foreground mb-4">Select PDF Page</h3>
       <p class="text-textMuted text-sm mb-4">This PDF has ${pdfInfo.numPages} pages. Select which page to import:</p>
       <div class="mb-4">
         <label class="block text-sm text-textMuted mb-2">Page Number</label>
-        <select id="pdf-page-select" class="w-full bg-charcoal border border-border rounded px-3 py-2 text-white">
+        <select id="pdf-page-select" class="w-full bg-charcoal border border-border rounded px-3 py-2 text-foreground">
           ${pdfInfo.pages.map(p => `<option value="${p.pageNumber}">Page ${p.pageNumber} (${Math.round(p.width)}x${Math.round(p.height)})</option>`).join('')}
         </select>
       </div>
       <div class="mb-4">
         <label class="block text-sm text-textMuted mb-2">Quality (DPI Scale)</label>
-        <select id="pdf-scale-select" class="w-full bg-charcoal border border-border rounded px-3 py-2 text-white">
+        <select id="pdf-scale-select" class="w-full bg-charcoal border border-border rounded px-3 py-2 text-foreground">
           <option value="1">72 DPI (Fast, Lower Quality)</option>
           <option value="2" selected>144 DPI (Recommended)</option>
           <option value="3">216 DPI (High Quality)</option>
@@ -94,7 +94,7 @@ export class ImportManager {
         </select>
       </div>
       <div class="flex gap-2">
-        <button id="pdf-cancel-btn" class="flex-1 bg-charcoal-light hover:bg-charcoal-lighter text-white py-2 rounded transition-colors">Cancel</button>
+        <button id="pdf-cancel-btn" class="flex-1 bg-charcoal-light hover:bg-charcoal-lighter text-foreground py-2 rounded transition-colors">Cancel</button>
         <button id="pdf-import-btn" class="flex-1 bg-accent hover:bg-accent/80 text-white py-2 rounded transition-colors">Import</button>
       </div>
     `;

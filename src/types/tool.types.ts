@@ -26,6 +26,7 @@ export interface ToolConfig {
   strokeWidth: number;
   fillColor: string;
   opacity: number;
+  fontFamily: string;
 }
 
 export interface ToolContext {

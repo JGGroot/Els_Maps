@@ -1,10 +1,18 @@
 import { themeManager, type Theme } from '@/utils/ThemeManager';
+import { settingsManager, type FontFamily } from '@/utils/SettingsManager';
+
+export interface SettingsModalCallbacks {
+  onDefaultStrokeColorChange?: (color: string) => void;
+  onDefaultStrokeWidthChange?: (width: number) => void;
+  onDefaultFontChange?: (font: FontFamily) => void;
+}
 
 export class SettingsModal {
   private overlay: HTMLElement;
   private modal: HTMLElement;
   private isOpen: boolean = false;
   private unsubscribe: (() => void) | null = null;
+  private callbacks: SettingsModalCallbacks = {};
 
   constructor(parent: HTMLElement) {
     // Create overlay
@@ -27,6 +35,7 @@ export class SettingsModal {
 
   private renderContent(): string {
     const currentTheme = themeManager.getTheme();
+    const settings = settingsManager.getSettings();
 
     return `
       <div class="flex items-center justify-between p-4 border-b border-border">
@@ -37,7 +46,7 @@ export class SettingsModal {
           </svg>
         </button>
       </div>
-      <div class="p-4 space-y-4">
+      <div class="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
         <div class="flex items-center justify-between">
           <div>
             <h3 class="text-sm font-medium text-foreground">Theme</h3>
@@ -70,7 +79,52 @@ export class SettingsModal {
           </div>
         </div>
 
-        <div class="pt-2 border-t border-border">
+        <div class="pt-4 border-t border-border space-y-4">
+          <h3 class="text-sm font-medium text-foreground">Drawing Defaults</h3>
+
+          <div class="space-y-2">
+            <label class="block text-xs text-muted">Default Stroke Color</label>
+            <div class="flex items-center gap-3">
+              <input
+                type="color"
+                id="default-stroke-color"
+                value="${settings.defaultStrokeColor}"
+                class="w-10 h-10 rounded cursor-pointer bg-charcoal border border-border"
+              />
+              <span class="text-sm text-foreground" id="stroke-color-value">${settings.defaultStrokeColor}</span>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <label class="block text-xs text-muted">Default Stroke Width</label>
+            <div class="flex items-center gap-3">
+              <input
+                type="range"
+                id="default-stroke-width"
+                min="1"
+                max="20"
+                value="${settings.defaultStrokeWidth}"
+                class="flex-1"
+              />
+              <span class="text-sm text-foreground min-w-[3rem] text-right" id="stroke-width-value">${settings.defaultStrokeWidth}px</span>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <label class="block text-xs text-muted">Default Font</label>
+            <select
+              id="default-font"
+              class="w-full bg-charcoal border border-border rounded px-3 py-2 text-foreground text-sm"
+            >
+              <option value="IBM Plex Sans" ${settings.defaultFont === 'IBM Plex Sans' ? 'selected' : ''} style="font-family: 'IBM Plex Sans', sans-serif">IBM Plex Sans</option>
+              <option value="Comic Sans MS" ${settings.defaultFont === 'Comic Sans MS' ? 'selected' : ''} style="font-family: 'Comic Sans MS', cursive">Comic Sans</option>
+              <option value="Arial" ${settings.defaultFont === 'Arial' ? 'selected' : ''} style="font-family: Arial, sans-serif">Arial</option>
+              <option value="Times New Roman" ${settings.defaultFont === 'Times New Roman' ? 'selected' : ''} style="font-family: 'Times New Roman', serif">Times New Roman</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="pt-4 border-t border-border">
           <h3 class="text-sm font-medium text-foreground mb-2">Keyboard Shortcuts</h3>
           <div class="space-y-1.5 text-xs">
             <div class="flex justify-between text-muted">
@@ -103,6 +157,10 @@ export class SettingsModal {
     `;
   }
 
+  setCallbacks(callbacks: SettingsModalCallbacks): void {
+    this.callbacks = callbacks;
+  }
+
   private setupEventListeners(): void {
     // Close button
     this.modal.querySelector('.close-btn')?.addEventListener('click', () => this.close());
@@ -113,6 +171,34 @@ export class SettingsModal {
         const theme = (btn as HTMLElement).dataset.theme as Theme;
         themeManager.setTheme(theme);
       });
+    });
+
+    // Default stroke color
+    const strokeColorInput = this.modal.querySelector('#default-stroke-color') as HTMLInputElement;
+    const strokeColorValue = this.modal.querySelector('#stroke-color-value') as HTMLElement;
+    strokeColorInput?.addEventListener('input', (e) => {
+      const color = (e.target as HTMLInputElement).value;
+      settingsManager.setDefaultStrokeColor(color);
+      if (strokeColorValue) strokeColorValue.textContent = color;
+      this.callbacks.onDefaultStrokeColorChange?.(color);
+    });
+
+    // Default stroke width
+    const strokeWidthInput = this.modal.querySelector('#default-stroke-width') as HTMLInputElement;
+    const strokeWidthValue = this.modal.querySelector('#stroke-width-value') as HTMLElement;
+    strokeWidthInput?.addEventListener('input', (e) => {
+      const width = Number((e.target as HTMLInputElement).value);
+      settingsManager.setDefaultStrokeWidth(width);
+      if (strokeWidthValue) strokeWidthValue.textContent = `${width}px`;
+      this.callbacks.onDefaultStrokeWidthChange?.(width);
+    });
+
+    // Default font
+    const fontSelect = this.modal.querySelector('#default-font') as HTMLSelectElement;
+    fontSelect?.addEventListener('change', (e) => {
+      const font = (e.target as HTMLSelectElement).value as FontFamily;
+      settingsManager.setDefaultFont(font);
+      this.callbacks.onDefaultFontChange?.(font);
     });
 
     // Subscribe to theme changes

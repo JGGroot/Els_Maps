@@ -38,7 +38,7 @@ export class ActionButton {
     const btn = document.createElement('button');
     btn.className = `
       flex items-center justify-center rounded-full shadow-lg
-      ${type === 'confirm' ? 'bg-accent text-white' : 'bg-surface text-white border border-border'}
+      ${type === 'confirm' ? 'bg-accent text-white' : 'bg-surface text-foreground border border-border'}
     `;
     btn.style.cssText = `
       width: ${LAYOUT.actionButtonSize}px;

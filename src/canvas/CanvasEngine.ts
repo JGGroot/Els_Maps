@@ -2,6 +2,7 @@ import { Canvas, FabricObject, Point, Polyline, Path } from 'fabric';
 import type { CanvasConfig, CanvasEventType, CanvasEngineEvents } from '@/types';
 import { CANVAS_DEFAULTS, ZOOM } from '@/constants';
 import { clamp } from '@/utils';
+import { themeManager } from '@/utils/ThemeManager';
 
 type EventCallback<T extends CanvasEventType> = (
   data: CanvasEngineEvents[T]
@@ -12,6 +13,7 @@ export class CanvasEngine {
   private canvas: Canvas | null = null;
   private container: HTMLElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private themeUnsubscribe: (() => void) | null = null;
   private listeners: Map<CanvasEventType, Set<EventCallback<CanvasEventType>>> =
     new Map();
 
@@ -39,7 +41,7 @@ export class CanvasEngine {
     this.canvas = new Canvas(canvasEl, {
       width,
       height,
-      backgroundColor: config?.backgroundColor ?? CANVAS_DEFAULTS.backgroundColor,
+      backgroundColor: config?.backgroundColor ?? this.getThemeBackgroundColor(),
       selection: config?.selection ?? true,
       preserveObjectStacking: config?.preserveObjectStacking ?? true,
       selectionColor: CANVAS_DEFAULTS.selectionColor,
@@ -52,6 +54,7 @@ export class CanvasEngine {
 
     this.setupResizeObserver();
     this.setupCanvasEvents();
+    this.setupThemeListener();
     this.emit('canvas:ready', this.canvas);
 
     return this.canvas;
@@ -68,6 +71,19 @@ export class CanvasEngine {
     });
 
     this.resizeObserver.observe(this.container);
+  }
+
+  private getThemeBackgroundColor(): string {
+    return themeManager.getTheme() === 'dark' ? '#1a1a1a' : '#f5f5f5';
+  }
+
+  private setupThemeListener(): void {
+    this.themeUnsubscribe = themeManager.subscribe((theme) => {
+      if (this.canvas) {
+        this.canvas.backgroundColor = theme === 'dark' ? '#1a1a1a' : '#f5f5f5';
+        this.canvas.requestRenderAll();
+      }
+    });
   }
 
   private setupCanvasEvents(): void {
@@ -230,6 +246,7 @@ export class CanvasEngine {
   }
 
   dispose(): void {
+    this.themeUnsubscribe?.();
     this.resizeObserver?.disconnect();
     this.canvas?.dispose();
     this.canvas = null;

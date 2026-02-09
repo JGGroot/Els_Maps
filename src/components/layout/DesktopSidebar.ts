@@ -2,6 +2,11 @@ import { ToolType } from '@/types';
 import type { ITool } from '@/types';
 import { LAYOUT } from '@/constants';
 import { ToolButton } from '../controls/ToolButton';
+import { themeManager } from '@/utils';
+
+// Import logos
+import logoLight from '@/assets/logos/ElsMapsLogo_LightMode.png';
+import logoDark from '@/assets/logos/ElsMapsLogo_DarkMode.png';
 
 export interface FileActionCallbacks {
   onImport: () => void;
@@ -51,6 +56,8 @@ export class DesktopSidebar {
   private undoBtn: HTMLButtonElement | null = null;
   private redoBtn: HTMLButtonElement | null = null;
   private lockStatusEl: HTMLElement | null = null;
+  private logoImg: HTMLImageElement | null = null;
+  private themeUnsubscribe: (() => void) | null = null;
 
   constructor(parent: HTMLElement, tools: ITool[], onToolSelect: (type: ToolType) => void) {
     this.onToolSelect = onToolSelect;
@@ -60,24 +67,46 @@ export class DesktopSidebar {
     this.element.style.width = `${LAYOUT.sidebarWidth}px`;
 
     const header = document.createElement('div');
-    header.className = 'p-4 border-b border-border flex items-center justify-between';
-    header.innerHTML = `
-      <h1 class="text-lg font-semibold text-foreground">El's Maps</h1>
-      <button class="settings-btn p-1.5 rounded hover:bg-charcoal-light transition-colors text-muted hover:text-foreground" aria-label="Settings">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-        </svg>
-      </button>
+    header.className = 'p-3 border-b border-border flex items-center justify-between';
+
+    // Logo image that switches with theme
+    this.logoImg = document.createElement('img');
+    this.logoImg.src = themeManager.getTheme() === 'dark' ? logoDark : logoLight;
+    this.logoImg.alt = "El's Maps";
+    this.logoImg.className = 'h-16 w-auto';
+    header.appendChild(this.logoImg);
+
+    // Subscribe to theme changes
+    this.themeUnsubscribe = themeManager.subscribe((theme) => {
+      if (this.logoImg) {
+        this.logoImg.src = theme === 'dark' ? logoDark : logoLight;
+      }
+    });
+
+    // Settings button
+    const settingsBtn = document.createElement('button');
+    settingsBtn.className = 'settings-btn p-1.5 rounded hover:bg-charcoal-light transition-colors text-muted hover:text-foreground';
+    settingsBtn.setAttribute('aria-label', 'Settings');
+    settingsBtn.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
     `;
-    header.querySelector('.settings-btn')?.addEventListener('click', () => {
+    settingsBtn.addEventListener('click', () => {
       this.settingsCallbacks?.onSettingsOpen();
     });
+    header.appendChild(settingsBtn);
+
     this.element.appendChild(header);
+
+    // Create scrollable content container
+    const scrollContainer = document.createElement('div');
+    scrollContainer.className = 'flex-1 overflow-y-auto flex flex-col min-h-0';
 
     // Add stroke/color section at the top
     const strokeSection = this.createStrokeSection();
-    this.element.appendChild(strokeSection);
+    scrollContainer.appendChild(strokeSection);
 
     const toolsSection = document.createElement('div');
     toolsSection.className = 'p-4 border-t border-border';
@@ -101,16 +130,17 @@ export class DesktopSidebar {
     });
 
     toolsSection.appendChild(toolsGrid);
-    this.element.appendChild(toolsSection);
+    scrollContainer.appendChild(toolsSection);
 
     // Add edit actions section
     const editSection = this.createEditSection();
-    this.element.appendChild(editSection);
+    scrollContainer.appendChild(editSection);
 
     // Add file actions section
     const fileSection = this.createFileSection();
-    this.element.appendChild(fileSection);
+    scrollContainer.appendChild(fileSection);
 
+    this.element.appendChild(scrollContainer);
     parent.appendChild(this.element);
   }
 
@@ -231,7 +261,8 @@ export class DesktopSidebar {
     widthInputContainer.appendChild(widthInput);
 
     const widthValue = document.createElement('span');
-    widthValue.className = 'text-xs text-white min-w-8 text-right';
+    widthValue.id = 'global-stroke-width-value';
+    widthValue.className = 'text-xs text-foreground min-w-8 text-right';
     widthValue.textContent = '2px';
     widthInputContainer.appendChild(widthValue);
 
@@ -308,7 +339,7 @@ export class DesktopSidebar {
     this.lockStatusEl.className = 'text-xs text-accent hidden items-center gap-1 py-1';
     this.lockStatusEl.innerHTML = `
       <span>Canvas locked</span>
-      <button class="unlock-btn text-textMuted hover:text-white ml-auto">[Unlock]</button>
+      <button class="unlock-btn text-textMuted hover:text-foreground ml-auto">[Unlock]</button>
     `;
     this.lockStatusEl.querySelector('.unlock-btn')?.addEventListener('click', () => {
       this.canvasLockCallbacks?.onUnlockCanvas();
@@ -344,7 +375,7 @@ export class DesktopSidebar {
 
   private createActionButton(label: string, icon: string): HTMLButtonElement {
     const button = document.createElement('button');
-    button.className = 'flex items-center justify-center gap-2 px-3 py-2 bg-charcoal-light hover:bg-charcoal-lighter rounded text-sm text-white transition-colors flex-1';
+    button.className = 'flex items-center justify-center gap-2 px-3 py-2 bg-charcoal-light hover:bg-charcoal-lighter rounded text-sm text-foreground transition-colors flex-1';
     button.innerHTML = `
       <span class="icon-${icon}"></span>
       <span>${label}</span>
@@ -386,6 +417,25 @@ export class DesktopSidebar {
     this.canvasLockEnabled = enabled;
     const input = this.element.querySelector('#canvas-lock-toggle') as HTMLInputElement | null;
     if (input) input.checked = enabled;
+  }
+
+  setStrokeColor(color: string): void {
+    const colorInput = this.element.querySelector('#global-stroke-color') as HTMLInputElement | null;
+    if (colorInput) {
+      colorInput.value = color;
+    }
+    this.updateQuickColorSelection(color);
+  }
+
+  setStrokeWidth(width: number): void {
+    const widthInput = this.element.querySelector('#global-stroke-width') as HTMLInputElement | null;
+    const widthValue = this.element.querySelector('#global-stroke-width-value') as HTMLElement | null;
+    if (widthInput) {
+      widthInput.value = String(width);
+    }
+    if (widthValue) {
+      widthValue.textContent = width + 'px';
+    }
   }
 
   updateCanvasLockStatus(isLocked: boolean): void {
@@ -440,6 +490,7 @@ export class DesktopSidebar {
   }
 
   destroy(): void {
+    this.themeUnsubscribe?.();
     this.toolButtons.forEach((button) => button.destroy());
     this.toolButtons.clear();
     this.element.remove();

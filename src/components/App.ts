@@ -4,7 +4,7 @@ import { CanvasEngine, canvasLockManager } from '@/canvas';
 import { GestureManager, type GestureManagerCallbacks } from '@/gestures';
 import { ToolManager, type ToolManagerCallbacks } from '@/tools';
 import { ToolType, type ActionButtonMode } from '@/types';
-import { isMobileDevice, historyManager, snapManager } from '@/utils';
+import { isMobileDevice, historyManager, snapManager, settingsManager } from '@/utils';
 import { MainLayout } from './layout/MainLayout';
 import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, type EditActionCallbacks, type CanvasLockCallbacks, type SettingsCallbacks } from './layout/DesktopSidebar';
 import { SettingsModal } from './layout/SettingsModal';
@@ -420,10 +420,38 @@ export class App {
 
     // Set up settings callbacks
     this.settingsModal = new SettingsModal(this.layout.getElement());
+    this.settingsModal.setCallbacks({
+      onDefaultStrokeColorChange: (color) => {
+        // Update the current stroke color to match the new default
+        this.toolManager?.setConfig({ strokeColor: color });
+        this.desktopSidebar?.setStrokeColor(color);
+      },
+      onDefaultStrokeWidthChange: (width) => {
+        // Update the current stroke width to match the new default
+        this.toolManager?.setConfig({ strokeWidth: width });
+        this.desktopSidebar?.setStrokeWidth(width);
+      },
+      onDefaultFontChange: (font) => {
+        // Update the current font to match the new default
+        this.toolManager?.setConfig({ fontFamily: font });
+      }
+    });
     const settingsCallbacks: SettingsCallbacks = {
       onSettingsOpen: () => this.settingsModal?.open()
     };
     this.desktopSidebar.setSettingsCallbacks(settingsCallbacks);
+
+    // Initialize tool manager with default settings
+    const defaultSettings = settingsManager.getSettings();
+    this.toolManager?.setConfig({
+      strokeColor: defaultSettings.defaultStrokeColor,
+      strokeWidth: defaultSettings.defaultStrokeWidth,
+      fontFamily: defaultSettings.defaultFont
+    });
+
+    // Update sidebar UI with saved default values
+    this.desktopSidebar?.setStrokeColor(defaultSettings.defaultStrokeColor);
+    this.desktopSidebar?.setStrokeWidth(defaultSettings.defaultStrokeWidth);
 
     const propertyCallbacks = {
       onStrokeColorChange: (color: string) => {
@@ -437,6 +465,9 @@ export class App {
       },
       onFontSizeChange: (size: number) => {
         this.updateSelectedObjectProperty('fontSize', size);
+      },
+      onFontFamilyChange: (fontFamily: string) => {
+        this.updateSelectedObjectProperty('fontFamily', fontFamily);
       },
       onImageLockChange: (locked: boolean) => {
         this.updateSelectedObjectLock(locked);

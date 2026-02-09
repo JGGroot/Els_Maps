@@ -71,7 +71,7 @@ export class ExportManager {
     modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-modal p-4';
     modal.innerHTML = `
       <div class="bg-surface rounded-lg p-6 max-w-sm w-full">
-        <h3 class="text-lg font-semibold text-white mb-4">Save File</h3>
+        <h3 class="text-lg font-semibold text-foreground mb-4">Save File</h3>
         <p class="text-textMuted mb-4">
           Long press the link below and select "Download Linked File" to save.
         </p>
@@ -83,7 +83,7 @@ export class ExportManager {
           ${filename}
         </a>
         <button
-          class="w-full bg-charcoal-light text-white py-2 rounded-lg"
+          class="w-full bg-charcoal-light text-foreground py-2 rounded-lg"
           id="close-modal"
         >
           Close

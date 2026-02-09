@@ -5,6 +5,7 @@
 /* Theme Variables */
 :root {
   --color-bg: #1a1a1a;
+  --color-bg-dark: #0d0d0d;
   --color-bg-light: #2d2d2d;
   --color-bg-lighter: #3d3d3d;
   --color-surface: #252525;
@@ -16,6 +17,7 @@
 
 [data-theme="light"] {
   --color-bg: #f5f5f5;
+  --color-bg-dark: #e0e0e0;
   --color-bg-light: #e5e5e5;
   --color-bg-lighter: #d5d5d5;
   --color-surface: #ffffff;
@@ -29,6 +31,32 @@ body {
   background-color: var(--color-bg);
   color: var(--color-foreground);
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Ensure sidebar and modal backgrounds respond to theme changes */
+.bg-surface {
+  background-color: var(--color-surface) !important;
+  transition: background-color 0.2s ease;
+}
+
+.bg-charcoal {
+  background-color: var(--color-bg) !important;
+  transition: background-color 0.2s ease;
+}
+
+.bg-charcoal-light {
+  background-color: var(--color-bg-light) !important;
+  transition: background-color 0.2s ease;
+}
+
+.bg-charcoal-lighter {
+  background-color: var(--color-bg-lighter) !important;
+  transition: background-color 0.2s ease;
+}
+
+.bg-charcoal-dark {
+  background-color: var(--color-bg-dark) !important;
+  transition: background-color 0.2s ease;
 }
 
 /* Prevent text selection during drawing */

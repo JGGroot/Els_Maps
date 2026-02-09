@@ -179,7 +179,7 @@ export class MobileToolbar {
 
   private createFileMenuButton(): HTMLButtonElement {
     const button = document.createElement('button');
-    button.className = 'flex items-center justify-center p-2 hover:bg-charcoal-light rounded text-white transition-colors flex-shrink-0';
+    button.className = 'flex items-center justify-center p-2 hover:bg-charcoal-light rounded text-foreground transition-colors flex-shrink-0';
     button.innerHTML = '<span class="icon-menu"></span>';
     button.addEventListener('click', () => this.toggleFileMenu());
     return button;
@@ -210,7 +210,7 @@ export class MobileToolbar {
 
     // Import button
     const importBtn = document.createElement('button');
-    importBtn.className = 'w-full text-left px-4 py-2 text-white hover:bg-charcoal-light transition-colors border-b border-border flex items-center gap-2';
+    importBtn.className = 'w-full text-left px-4 py-2 text-foreground hover:bg-charcoal-light transition-colors border-b border-border flex items-center gap-2';
     importBtn.innerHTML = '<span class="icon-import"></span><span>Import Image</span>';
     importBtn.addEventListener('click', () => {
       this.fileCallbacks?.onImport();
@@ -220,7 +220,7 @@ export class MobileToolbar {
 
     // Export PNG button
     const exportPngBtn = document.createElement('button');
-    exportPngBtn.className = 'w-full text-left px-4 py-2 text-white hover:bg-charcoal-light transition-colors border-b border-border flex items-center gap-2';
+    exportPngBtn.className = 'w-full text-left px-4 py-2 text-foreground hover:bg-charcoal-light transition-colors border-b border-border flex items-center gap-2';
     exportPngBtn.innerHTML = '<span class="icon-export"></span><span>Export PNG</span>';
     exportPngBtn.addEventListener('click', () => {
       this.fileCallbacks?.onExportPNG();
@@ -230,7 +230,7 @@ export class MobileToolbar {
 
     // Export JPG button
     const exportJpgBtn = document.createElement('button');
-    exportJpgBtn.className = 'w-full text-left px-4 py-2 text-white hover:bg-charcoal-light transition-colors border-b border-border flex items-center gap-2';
+    exportJpgBtn.className = 'w-full text-left px-4 py-2 text-foreground hover:bg-charcoal-light transition-colors border-b border-border flex items-center gap-2';
     exportJpgBtn.innerHTML = '<span class="icon-export"></span><span>Export JPG</span>';
     exportJpgBtn.addEventListener('click', () => {
       this.fileCallbacks?.onExportJPG();
@@ -240,7 +240,7 @@ export class MobileToolbar {
 
     // Export PDF button
     const exportPdfBtn = document.createElement('button');
-    exportPdfBtn.className = 'w-full text-left px-4 py-2 text-white hover:bg-charcoal-light transition-colors border-b border-border flex items-center gap-2';
+    exportPdfBtn.className = 'w-full text-left px-4 py-2 text-foreground hover:bg-charcoal-light transition-colors border-b border-border flex items-center gap-2';
     exportPdfBtn.innerHTML = '<span class="icon-export"></span><span>Export PDF</span>';
     exportPdfBtn.addEventListener('click', () => {
       this.fileCallbacks?.onExportPDF();
@@ -250,7 +250,7 @@ export class MobileToolbar {
 
     // Copy to clipboard button
     const copyBtn = document.createElement('button');
-    copyBtn.className = 'w-full text-left px-4 py-2 text-white hover:bg-charcoal-light transition-colors flex items-center gap-2';
+    copyBtn.className = 'w-full text-left px-4 py-2 text-foreground hover:bg-charcoal-light transition-colors flex items-center gap-2';
     copyBtn.innerHTML = '<span class="icon-copy"></span><span>Copy to Clipboard</span>';
     copyBtn.addEventListener('click', () => {
       this.fileCallbacks?.onCopyToClipboard();
