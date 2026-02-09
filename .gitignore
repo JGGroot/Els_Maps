@@ -5,3 +5,4 @@ dist/
 *.log
 *.tsbuildinfo
 nul
+.claude/settings.local.json
