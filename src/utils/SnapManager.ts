@@ -24,7 +24,6 @@ export class SnapManager {
     visible: false
   };
   private indicatorEl: HTMLDivElement | null = null;
-  private indicatorHost: HTMLElement | null = null;
   private afterRenderHandler: (() => void) | null = null;
 
   setCanvas(canvas: Canvas): void {
@@ -240,7 +239,6 @@ export class SnapManager {
     this.afterRenderHandler = null;
     this.indicatorEl?.remove();
     this.indicatorEl = null;
-    this.indicatorHost = null;
   }
 
   private ensureIndicatorHost(): void {
@@ -248,8 +246,6 @@ export class SnapManager {
     const wrapper = (this.canvas as any).wrapperEl as HTMLElement | undefined;
     const host = wrapper ?? (this.canvas as any).upperCanvasEl?.parentElement ?? null;
     if (!host) return;
-    this.indicatorHost = host;
-
     if (!this.indicatorEl) {
       if (!host.style.position) {
         host.style.position = 'relative';
