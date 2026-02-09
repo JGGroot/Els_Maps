@@ -6,7 +6,8 @@ import { ToolManager, type ToolManagerCallbacks } from '@/tools';
 import { ToolType, type ActionButtonMode } from '@/types';
 import { isMobileDevice, historyManager, snapManager } from '@/utils';
 import { MainLayout } from './layout/MainLayout';
-import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, type EditActionCallbacks, type CanvasLockCallbacks } from './layout/DesktopSidebar';
+import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, type EditActionCallbacks, type CanvasLockCallbacks, type SettingsCallbacks } from './layout/DesktopSidebar';
+import { SettingsModal } from './layout/SettingsModal';
 import { MobileToolbar, type StrokeColorCallbacks as MobileStrokeColorCallbacks } from './layout/MobileToolbar';
 import { PropertiesPanel, type ProjectCallbacks } from './layout/PropertiesPanel';
 import { BottomSheet } from './layout/BottomSheet';
@@ -31,6 +32,7 @@ export class App {
   private mobileToolbar: MobileToolbar | null = null;
   private propertiesPanel: PropertiesPanel | null = null;
   private bottomSheet: BottomSheet | null = null;
+  private settingsModal: SettingsModal | null = null;
   private reticle: Reticle | null = null;
   private actionButton: ActionButton | null = null;
 
@@ -416,6 +418,13 @@ export class App {
 
     this.desktopSidebar.setEditCallbacks(editCallbacks);
 
+    // Set up settings callbacks
+    this.settingsModal = new SettingsModal(this.layout.getElement());
+    const settingsCallbacks: SettingsCallbacks = {
+      onSettingsOpen: () => this.settingsModal?.open()
+    };
+    this.desktopSidebar.setSettingsCallbacks(settingsCallbacks);
+
     const propertyCallbacks = {
       onStrokeColorChange: (color: string) => {
         this.updateSelectedObjectProperty('stroke', color);
@@ -707,6 +716,7 @@ export class App {
     this.mobileToolbar?.destroy();
     this.propertiesPanel?.destroy();
     this.bottomSheet?.destroy();
+    this.settingsModal?.destroy();
     this.reticle?.destroy();
     this.actionButton?.destroy();
   }

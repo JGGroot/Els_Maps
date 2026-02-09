@@ -5,12 +5,16 @@ export default {
     extend: {
       colors: {
         charcoal: {
-          DEFAULT: '#1a1a1a',
-          light: '#2d2d2d',
+          DEFAULT: 'var(--color-bg)',
+          light: 'var(--color-bg-light)',
+          lighter: 'var(--color-bg-lighter)',
           dark: '#0d0d0d'
         },
-        surface: '#252525',
-        accent: '#4a9eff'
+        surface: 'var(--color-surface)',
+        border: 'var(--color-border)',
+        foreground: 'var(--color-foreground)',
+        muted: 'var(--color-muted)',
+        accent: 'var(--color-accent)'
       },
       spacing: {
         'toolbar': '60px',

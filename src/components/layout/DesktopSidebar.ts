@@ -32,6 +32,10 @@ export interface CanvasLockCallbacks {
   isCanvasLocked: () => boolean;
 }
 
+export interface SettingsCallbacks {
+  onSettingsOpen: () => void;
+}
+
 export class DesktopSidebar {
   private element: HTMLElement;
   private toolButtons: Map<ToolType, ToolButton> = new Map();
@@ -41,6 +45,7 @@ export class DesktopSidebar {
   private strokeCallbacks: StrokeColorCallbacks | null = null;
   private snapCallbacks: SnapCallbacks | null = null;
   private canvasLockCallbacks: CanvasLockCallbacks | null = null;
+  private settingsCallbacks: SettingsCallbacks | null = null;
   private snapEnabled: boolean = true;
   private canvasLockEnabled: boolean = false;
   private undoBtn: HTMLButtonElement | null = null;
@@ -55,8 +60,19 @@ export class DesktopSidebar {
     this.element.style.width = `${LAYOUT.sidebarWidth}px`;
 
     const header = document.createElement('div');
-    header.className = 'p-4 border-b border-border';
-    header.innerHTML = `<h1 class="text-lg font-semibold text-white">El's Maps</h1>`;
+    header.className = 'p-4 border-b border-border flex items-center justify-between';
+    header.innerHTML = `
+      <h1 class="text-lg font-semibold text-foreground">El's Maps</h1>
+      <button class="settings-btn p-1.5 rounded hover:bg-charcoal-light transition-colors text-muted hover:text-foreground" aria-label="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    `;
+    header.querySelector('.settings-btn')?.addEventListener('click', () => {
+      this.settingsCallbacks?.onSettingsOpen();
+    });
     this.element.appendChild(header);
 
     // Add stroke/color section at the top
@@ -354,6 +370,10 @@ export class DesktopSidebar {
 
   setCanvasLockCallbacks(callbacks: CanvasLockCallbacks): void {
     this.canvasLockCallbacks = callbacks;
+  }
+
+  setSettingsCallbacks(callbacks: SettingsCallbacks): void {
+    this.settingsCallbacks = callbacks;
   }
 
   setSnapEnabled(enabled: boolean): void {
