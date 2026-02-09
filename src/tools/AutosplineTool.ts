@@ -1,10 +1,18 @@
-import { Path, Circle, Point } from 'fabric';
+import { Path, Polyline, Circle, Point } from 'fabric';
 import type { FabricObject } from 'fabric';
 import { ToolType } from '@/types';
 import type { TouchPoint } from '@/types';
 import { BaseTool } from './BaseTool';
 import { LAYOUT } from '@/constants';
-import { snapManager, type SnapResult, type SnapPoint } from '@/utils';
+import {
+  snapManager,
+  buildPathString,
+  mergePathShapeWithTargets,
+  type SnapResult,
+  type SnapPoint,
+  type PathShape,
+  type MergeTarget
+} from '@/utils';
 
 /**
  * AutosplineTool - Auto-completing bezier curves
@@ -21,8 +29,9 @@ export class AutosplineTool extends BaseTool {
   private pointMarkers: Circle[] = [];
   private isDrawingFreehand: boolean = false;
   private freehandPoints: Point[] = [];
-  private snapIndicator: Circle | null = null;
   private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
+  private startSnap: { type: 'start' | 'end'; object: FabricObject } | null = null;
+  private endSnap: { type: 'start' | 'end'; object: FabricObject } | null = null;
 
   protected setupEventListeners(): void {
     if (!this.canvas) return;
@@ -55,6 +64,8 @@ export class AutosplineTool extends BaseTool {
         obj.evented = true;
       });
     }
+
+    snapManager.hideSnapIndicator();
   }
 
   onMouseDown(point: Point, event: MouseEvent): void {
@@ -193,6 +204,26 @@ export class AutosplineTool extends BaseTool {
     const snapResult = localSnap.snapped ? localSnap : snapManager.findNearestEndpoint(point);
     const finalPoint = snapResult.snapped ? snapResult.point : point;
 
+    if (this.points.length === 0) {
+      if (snapResult.snapped && snapResult.snapPoint?.object) {
+        this.startSnap = {
+          type: snapResult.snapPoint.type,
+          object: snapResult.snapPoint.object
+        };
+      } else {
+        this.startSnap = null;
+      }
+    }
+
+    if (snapResult.snapped && snapResult.snapPoint?.object) {
+      this.endSnap = {
+        type: snapResult.snapPoint.type,
+        object: snapResult.snapPoint.object
+      };
+    } else {
+      this.endSnap = null;
+    }
+
     this.points.push(finalPoint);
     this.addPointMarker(finalPoint);
     this.updatePreviewPath();
@@ -239,6 +270,7 @@ export class AutosplineTool extends BaseTool {
       this.addPointMarker(p);
     });
 
+    this.endSnap = null;
     this.updatePreviewPath();
   }
 
@@ -394,6 +426,35 @@ export class AutosplineTool extends BaseTool {
     this.snapLastPointIfNeeded();
     this.clearTemporaryObjects();
 
+    const shape = this.buildPathShape(this.points);
+    const startTarget = this.getMergeTarget(this.startSnap);
+    const endTarget = this.getMergeTarget(this.endSnap);
+
+    if (shape && (startTarget || endTarget)) {
+      const merged = mergePathShapeWithTargets(shape, startTarget ?? undefined, endTarget ?? undefined);
+      if (merged) {
+        const source = startTarget?.object ?? endTarget?.object ?? null;
+        const stroke = (source?.stroke as string) ?? this.config?.strokeColor ?? '#ffffff';
+        const strokeWidth = (source?.strokeWidth as number) ?? this.config?.strokeWidth ?? 2;
+
+        merged.remove.forEach((obj) => this.canvas!.remove(obj));
+
+        const pathData = buildPathString(merged.shape);
+        const finalPath = new Path(pathData, {
+          stroke,
+          strokeWidth,
+          fill: 'transparent',
+          selectable: true,
+          evented: true
+        });
+
+        this.canvas.add(finalPath);
+        this.canvas.requestRenderAll();
+        this.resetState();
+        return;
+      }
+    }
+
     const pathData = this.generateSmoothPath(this.points);
 
     const finalPath = new Path(pathData, {
@@ -415,12 +476,24 @@ export class AutosplineTool extends BaseTool {
     const lastIndex = this.points.length - 1;
     const lastPoint = this.points[lastIndex];
     const snapResult = snapManager.findNearestEndpoint(lastPoint);
-    if (!snapResult.snapped || !snapResult.snapPoint) return;
+    if (!snapResult.snapped || !snapResult.snapPoint) {
+      this.endSnap = null;
+      return;
+    }
 
     this.points[lastIndex] = snapResult.point;
     const marker = this.pointMarkers[lastIndex];
     if (marker) {
       marker.set({ left: snapResult.point.x, top: snapResult.point.y });
+    }
+
+    if (snapResult.snapPoint.object) {
+      this.endSnap = {
+        type: snapResult.snapPoint.type,
+        object: snapResult.snapPoint.object
+      };
+    } else {
+      this.endSnap = null;
     }
   }
 
@@ -459,38 +532,11 @@ export class AutosplineTool extends BaseTool {
   }
 
   private updateSnapIndicator(x: number, y: number): void {
-    if (!this.canvas) return;
-
-    // Scale radius inversely with zoom to maintain consistent screen size
-    const zoom = this.canvas.getZoom();
-    const radius = 8 / zoom;
-    const strokeWidth = 2 / zoom;
-
-    if (!this.snapIndicator) {
-      this.snapIndicator = new Circle({
-        radius,
-        fill: 'transparent',
-        stroke: '#4a9eff',
-        strokeWidth,
-        originX: 'center',
-        originY: 'center',
-        selectable: false,
-        evented: false
-      });
-      (this.snapIndicator as any).isHelper = true;
-      this.canvas.add(this.snapIndicator);
-    }
-
-    this.snapIndicator.set({ left: x, top: y, radius, strokeWidth });
-    this.canvas.bringObjectToFront(this.snapIndicator);
-    this.canvas.requestRenderAll();
+    snapManager.showSnapIndicator(x, y);
   }
 
   private clearSnapIndicator(): void {
-    if (this.snapIndicator && this.canvas) {
-      this.canvas.remove(this.snapIndicator);
-      this.snapIndicator = null;
-    }
+    snapManager.hideSnapIndicator();
   }
 
   private resetState(): void {
@@ -498,8 +544,57 @@ export class AutosplineTool extends BaseTool {
     this.freehandPoints = [];
     this.isDrawingFreehand = false;
     this.drawing = false;
+    this.startSnap = null;
+    this.endSnap = null;
     this.context?.hideActionButton();
     this.context?.updateReticle(0, 0, false);
+  }
+
+  private getMergeTarget(
+    snap: { type: 'start' | 'end'; object: FabricObject } | null
+  ): MergeTarget | null {
+    if (!snap?.object) return null;
+    if (!(snap.object instanceof Path) && !(snap.object instanceof Polyline)) {
+      return null;
+    }
+    return { object: snap.object, type: snap.type };
+  }
+
+  private buildPathShape(points: Point[]): PathShape | null {
+    if (points.length === 0) return null;
+    const start = points[0];
+    const segments: PathShape['segments'] = [];
+
+    if (points.length === 1) {
+      return { start, segments };
+    }
+
+    if (points.length === 2) {
+      const end = points[1];
+      segments.push({ cp1: end, cp2: end, end });
+      return { start, segments };
+    }
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[Math.max(0, i - 1)];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[Math.min(points.length - 1, i + 2)];
+
+      const tension = 0.3;
+      const cp1x = p1.x + (p2.x - p0.x) * tension;
+      const cp1y = p1.y + (p2.y - p0.y) * tension;
+      const cp2x = p2.x - (p3.x - p1.x) * tension;
+      const cp2y = p2.y - (p3.y - p1.y) * tension;
+
+      segments.push({
+        cp1: new Point(cp1x, cp1y),
+        cp2: new Point(cp2x, cp2y),
+        end: p2
+      });
+    }
+
+    return { start, segments };
   }
 
   cancel(): void {

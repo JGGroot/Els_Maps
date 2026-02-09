@@ -18,9 +18,22 @@ export class SnapManager {
   private canvas: Canvas | null = null;
   private snapThreshold: number = 25;
   private enabled: boolean = true;
+  private indicator: { x: number; y: number; visible: boolean } = {
+    x: 0,
+    y: 0,
+    visible: false
+  };
+  private indicatorEl: HTMLDivElement | null = null;
+  private indicatorHost: HTMLElement | null = null;
+  private afterRenderHandler: (() => void) | null = null;
 
   setCanvas(canvas: Canvas): void {
+    if (this.canvas && this.canvas !== canvas) {
+      this.detachIndicator();
+    }
     this.canvas = canvas;
+    this.ensureIndicatorHost();
+    this.attachAfterRender();
   }
 
   setEnabled(enabled: boolean): void {
@@ -190,6 +203,97 @@ export class SnapManager {
       y: snapPoint.y,
       radius: this.snapThreshold
     };
+  }
+
+  getSnapIndicatorStyle(): { radius: number; strokeWidth: number } {
+    const zoom = this.canvas?.getZoom() ?? 1;
+    const zoomBoost = Math.min(10, Math.max(0, Math.log2(zoom) * 3));
+    const screenRadius = Math.max(12, 12 + zoomBoost);
+    const screenStroke = Math.max(2.5, 2.5 + Math.min(2, Math.max(0, Math.log2(zoom) * 0.6)));
+
+    return {
+      radius: screenRadius / zoom,
+      strokeWidth: screenStroke / zoom
+    };
+  }
+
+  showSnapIndicator(x: number, y: number): void {
+    this.indicator = { x, y, visible: true };
+    this.renderSnapIndicator();
+  }
+
+  hideSnapIndicator(): void {
+    this.indicator.visible = false;
+    this.renderSnapIndicator();
+  }
+
+  private attachAfterRender(): void {
+    if (!this.canvas || this.afterRenderHandler) return;
+    this.afterRenderHandler = () => this.renderSnapIndicator();
+    this.canvas.on('after:render', this.afterRenderHandler);
+  }
+
+  private detachIndicator(): void {
+    if (this.canvas && this.afterRenderHandler) {
+      this.canvas.off('after:render', this.afterRenderHandler);
+    }
+    this.afterRenderHandler = null;
+    this.indicatorEl?.remove();
+    this.indicatorEl = null;
+    this.indicatorHost = null;
+  }
+
+  private ensureIndicatorHost(): void {
+    if (!this.canvas) return;
+    const wrapper = (this.canvas as any).wrapperEl as HTMLElement | undefined;
+    const host = wrapper ?? (this.canvas as any).upperCanvasEl?.parentElement ?? null;
+    if (!host) return;
+    this.indicatorHost = host;
+
+    if (!this.indicatorEl) {
+      if (!host.style.position) {
+        host.style.position = 'relative';
+      }
+      const el = document.createElement('div');
+      el.style.position = 'absolute';
+      el.style.left = '0';
+      el.style.top = '0';
+      el.style.width = '0';
+      el.style.height = '0';
+      el.style.borderRadius = '50%';
+      el.style.border = '2px solid #4a9eff';
+      el.style.background = 'rgba(74, 158, 255, 0.15)';
+      el.style.transform = 'translate(-50%, -50%)';
+      el.style.pointerEvents = 'none';
+      el.style.zIndex = '50';
+      el.style.display = 'none';
+      this.indicatorEl = el;
+      host.appendChild(el);
+    }
+  }
+
+  private renderSnapIndicator(): void {
+    if (!this.canvas || !this.indicatorEl) return;
+    if (!this.indicator.visible) {
+      this.indicatorEl.style.display = 'none';
+      return;
+    }
+
+    const vt = this.canvas.viewportTransform ?? [1, 0, 0, 1, 0, 0];
+    const screenX = vt[0] * this.indicator.x + vt[2] * this.indicator.y + vt[4];
+    const screenY = vt[1] * this.indicator.x + vt[3] * this.indicator.y + vt[5];
+
+    const zoom = this.canvas.getZoom() ?? 1;
+    const { radius, strokeWidth } = this.getSnapIndicatorStyle();
+    const radiusPx = radius * zoom;
+    const strokePx = strokeWidth * zoom;
+
+    this.indicatorEl.style.display = 'block';
+    this.indicatorEl.style.left = `${screenX}px`;
+    this.indicatorEl.style.top = `${screenY}px`;
+    this.indicatorEl.style.width = `${radiusPx * 2}px`;
+    this.indicatorEl.style.height = `${radiusPx * 2}px`;
+    this.indicatorEl.style.borderWidth = `${strokePx}px`;
   }
 }
 

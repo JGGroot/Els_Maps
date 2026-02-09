@@ -8,8 +8,6 @@ export class CanvasContainer {
     this.element = document.createElement('div');
     this.element.className = 'canvas-container absolute inset-0 z-canvas no-select';
     this.element.style.cssText = `
-      touch-action: none;
-      -webkit-touch-callout: none;
       -webkit-user-select: none;
       user-select: none;
     `;

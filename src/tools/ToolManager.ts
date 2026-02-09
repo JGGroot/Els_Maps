@@ -12,7 +12,6 @@ import { TSplineTool } from './TSplineTool';
 import { RectangleTool } from './RectangleTool';
 import { EllipseTool } from './EllipseTool';
 import { TextTool } from './TextTool';
-import { isMobileDevice } from '@/utils';
 
 type ToolEventType = 'tool:changed' | 'drawing:started' | 'drawing:ended';
 type ToolEventCallback = (tool: ITool) => void;
@@ -34,7 +33,7 @@ export class ToolManager {
 
   constructor(callbacks: ToolManagerCallbacks) {
     this.config = { ...TOOL_DEFAULTS };
-    this.isMobile = isMobileDevice();
+    this.isMobile = false;
     this.callbacks = callbacks;
 
     this.registerTool(new SelectionTool());

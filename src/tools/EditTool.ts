@@ -2,7 +2,7 @@ import { Circle, Line, Path, Polyline, Point } from 'fabric';
 import type { FabricObject, TMat2D, Canvas } from 'fabric';
 import { ToolType } from '@/types';
 import type { TouchPoint } from '@/types';
-import { historyManager } from '@/utils';
+import { historyManager, snapManager } from '@/utils';
 import { BaseTool } from './BaseTool';
 
 // ============================================================================
@@ -124,6 +124,7 @@ class EditMarkerManager {
   private editPoints: EditPoint[] = [];
   private handleLines: Line[] = [];
   private lastZoom: number = 1;
+  private sharedAnchorTolerance: number = 0.5;
 
   constructor(canvas: Canvas) {
     this.canvas = canvas;
@@ -211,8 +212,8 @@ class EditMarkerManager {
         const x = segment[1] as number;
         const y = segment[2] as number;
         const canvasPoint = transformPoint(x - pathOffset.x, y - pathOffset.y, matrix);
-
-        this.createMarker(canvasPoint, pointIndex, PointType.ANCHOR, segIdx);
+        const sharedMarker = this.findSharedAnchorMarker(canvasPoint);
+        this.createMarker(canvasPoint, pointIndex, PointType.ANCHOR, segIdx, undefined, sharedMarker);
         prevAnchorCanvasPoint = canvasPoint;
         anchorIndex++;
         pointIndex++;
@@ -244,7 +245,8 @@ class EditMarkerManager {
         pointIndex++;
 
         // Anchor point
-        this.createMarker(anchorCanvas, pointIndex, PointType.ANCHOR, segIdx);
+        const sharedMarker = this.findSharedAnchorMarker(anchorCanvas);
+        this.createMarker(anchorCanvas, pointIndex, PointType.ANCHOR, segIdx, undefined, sharedMarker);
         prevAnchorCanvasPoint = anchorCanvas;
         anchorIndex++;
         pointIndex++;
@@ -268,7 +270,8 @@ class EditMarkerManager {
         pointIndex++;
 
         // Anchor point
-        this.createMarker(anchorCanvas, pointIndex, PointType.ANCHOR, segIdx);
+        const sharedMarker = this.findSharedAnchorMarker(anchorCanvas);
+        this.createMarker(anchorCanvas, pointIndex, PointType.ANCHOR, segIdx, undefined, sharedMarker);
         prevAnchorCanvasPoint = anchorCanvas;
         anchorIndex++;
         pointIndex++;
@@ -281,12 +284,12 @@ class EditMarkerManager {
     index: number,
     type: PointType,
     segmentIndex?: number,
-    controlPointIndex?: number
+    controlPointIndex?: number,
+    existingMarker?: Circle | null
   ): EditPoint | null {
     const style = MARKER_STYLES[type];
     const zoomScale = this.getZoomScale();
-
-    const marker = new Circle({
+    const marker = existingMarker ?? new Circle({
       left: position.x,
       top: position.y,
       radius: style.radius * zoomScale,
@@ -300,8 +303,10 @@ class EditMarkerManager {
       objectCaching: false
     });
 
-    this.setMarkerMetadata(marker);
-    this.canvas.add(marker);
+    if (!existingMarker) {
+      this.setMarkerMetadata(marker);
+      this.canvas.add(marker);
+    }
 
     const editPoint: EditPoint = {
       marker,
@@ -313,6 +318,19 @@ class EditMarkerManager {
 
     this.editPoints.push(editPoint);
     return editPoint;
+  }
+
+  private findSharedAnchorMarker(position: Point): Circle | null {
+    const tolerance = this.sharedAnchorTolerance * this.getZoomScale();
+    for (const ep of this.editPoints) {
+      if (ep.type !== PointType.ANCHOR) continue;
+      const x = ep.marker.left ?? 0;
+      const y = ep.marker.top ?? 0;
+      if (Math.hypot(position.x - x, position.y - y) <= tolerance) {
+        return ep.marker;
+      }
+    }
+    return null;
   }
 
   private createHandleLine(anchor: Point, control: Point, editPoint: EditPoint): void {
@@ -602,6 +620,7 @@ export class EditTool extends BaseTool {
   private editedSinceSelect: boolean = false;
   private suppressSelectionClear: boolean = false;
   private lastPointer: Point | null = null;
+  private linkedAnchorGroups: Map<EditPoint, EditPoint[]> = new Map();
 
   // DOM references
   private upperCanvasEl: HTMLCanvasElement | null = null;
@@ -626,6 +645,7 @@ export class EditTool extends BaseTool {
     this.markerManager = new EditMarkerManager(this.canvas);
     this.stateManager = new InteractionStateManager(this.canvas);
     this.hitTester = new PointHitTester(this.canvas);
+    snapManager.setCanvas(this.canvas);
 
     // Configure canvas for edit mode
     this.canvas.selection = false;
@@ -975,6 +995,7 @@ export class EditTool extends BaseTool {
     if (this.markerManager) {
       const points = this.markerManager.createMarkersForObject(obj);
       this.hitTester?.setEditPoints(points);
+      this.buildLinkedAnchors();
     }
 
     this.canvas?.requestRenderAll();
@@ -983,13 +1004,27 @@ export class EditTool extends BaseTool {
   private movePoint(editPoint: EditPoint, newPos: Point): void {
     if (!this.selectedObject || !this.canvas || !this.markerManager) return;
 
+    const targetPos = this.getSnapPosition(editPoint, newPos);
+
+    if (this.selectedObject instanceof Path && editPoint.type === PointType.ANCHOR) {
+      const linked = this.linkedAnchorGroups.get(editPoint);
+      if (linked && linked.length > 1) {
+        this.updateLinkedAnchorMarkers(linked, targetPos);
+        this.updatePathAnchors(this.selectedObject, linked, targetPos);
+        this.hasChanges = true;
+        this.editedSinceSelect = true;
+        this.canvas.requestRenderAll();
+        return;
+      }
+    }
+
     // Update marker visual position
-    this.markerManager.updateMarkerPosition(editPoint, newPos);
+    this.markerManager.updateMarkerPosition(editPoint, targetPos);
 
     // Convert canvas position to local object coordinates
     const matrix = this.selectedObject.calcTransformMatrix();
     const pathOffset = getPathOffset(this.selectedObject);
-    const localBase = inverseTransformPoint(newPos.x, newPos.y, matrix);
+    const localBase = inverseTransformPoint(targetPos.x, targetPos.y, matrix);
     const localPos = new Point(
       localBase.x + pathOffset.x,
       localBase.y + pathOffset.y
@@ -1033,6 +1068,39 @@ export class EditTool extends BaseTool {
     polyline.dirty = true;
     polyline.setCoords();
     this.syncMarkersWithObject();
+  }
+
+  private getSnapPosition(editPoint: EditPoint, position: Point): Point {
+    if (!snapManager.isEnabled() || editPoint.type !== PointType.ANCHOR) {
+      return position;
+    }
+
+    const threshold = snapManager.getAdjustedThreshold();
+    let best: { point: Point; dist: number } | null = null;
+
+    const externalSnap = snapManager.findNearestEndpoint(position, this.selectedObject ?? undefined);
+    if (externalSnap.snapped) {
+      const dist = Math.hypot(
+        position.x - externalSnap.point.x,
+        position.y - externalSnap.point.y
+      );
+      best = { point: externalSnap.point, dist };
+    }
+
+    const editPoints = this.markerManager?.getEditPoints() ?? [];
+    const linked = this.linkedAnchorGroups.get(editPoint);
+    for (const ep of editPoints) {
+      if (ep === editPoint || ep.type !== PointType.ANCHOR) continue;
+      if (linked && linked.includes(ep)) continue;
+      const x = ep.marker.left ?? 0;
+      const y = ep.marker.top ?? 0;
+      const dist = Math.hypot(position.x - x, position.y - y);
+      if (dist <= threshold && (!best || dist < best.dist)) {
+        best = { point: new Point(x, y), dist };
+      }
+    }
+
+    return best ? best.point : position;
   }
 
   private updatePathPoint(path: Path, editPoint: EditPoint, pos: Point): void {
@@ -1108,6 +1176,7 @@ export class EditTool extends BaseTool {
       if (this.markerManager) {
         const newPoints = this.markerManager.createMarkersForObject(this.selectedObject);
         this.hitTester?.setEditPoints(newPoints);
+        this.buildLinkedAnchors();
       }
 
       this.activePoint = null;
@@ -1276,15 +1345,22 @@ export class EditTool extends BaseTool {
 
   private getPathAnchorRef(
     path: Path,
-    editPoint: EditPoint
+    editPoint?: EditPoint,
+    skipSegments?: Set<number>
   ): { segmentIndex: number; xIndex: number; yIndex: number } | null {
     if (!path.path) return null;
 
-    // Skip the segment being edited if it's an anchor
-    const skipSegment = editPoint.type === PointType.ANCHOR ? editPoint.segmentIndex : undefined;
+    const skipSet = new Set<number>();
+    if (skipSegments) {
+      skipSegments.forEach((seg) => skipSet.add(seg));
+    }
+
+    if (editPoint && editPoint.type === PointType.ANCHOR && editPoint.segmentIndex !== undefined) {
+      skipSet.add(editPoint.segmentIndex);
+    }
 
     for (let i = 0; i < path.path.length; i++) {
-      if (skipSegment !== undefined && i === skipSegment) continue;
+      if (skipSet.has(i)) continue;
 
       const segment = path.path[i];
       const command = segment[0];
@@ -1301,6 +1377,90 @@ export class EditTool extends BaseTool {
     }
 
     return null;
+  }
+
+  private buildLinkedAnchors(): void {
+    this.linkedAnchorGroups.clear();
+    if (!this.markerManager || !this.canvas) return;
+
+    const anchors = this.markerManager
+      .getEditPoints()
+      .filter((ep) => ep.type === PointType.ANCHOR);
+
+    if (anchors.length < 2) return;
+
+    const groupsByMarker = new Map<Circle, EditPoint[]>();
+    for (const ep of anchors) {
+      const list = groupsByMarker.get(ep.marker) ?? [];
+      list.push(ep);
+      groupsByMarker.set(ep.marker, list);
+    }
+
+    for (const group of groupsByMarker.values()) {
+      if (group.length > 1) {
+        group.forEach((ep) => this.linkedAnchorGroups.set(ep, group));
+      }
+    }
+  }
+
+  private updateLinkedAnchorMarkers(editPoints: EditPoint[], position: Point): void {
+    if (!this.markerManager) return;
+    for (const ep of editPoints) {
+      this.markerManager.updateMarkerPosition(ep, position);
+    }
+  }
+
+  private updatePathAnchors(path: Path, editPoints: EditPoint[], canvasPos: Point): void {
+    if (!path.path) return;
+
+    const matrix = path.calcTransformMatrix();
+    const pathOffset = getPathOffset(path);
+    const localBase = inverseTransformPoint(canvasPos.x, canvasPos.y, matrix);
+    const localPos = new Point(
+      localBase.x + pathOffset.x,
+      localBase.y + pathOffset.y
+    );
+
+    const skipSegments = new Set<number>();
+    editPoints.forEach((ep) => {
+      if (ep.segmentIndex !== undefined) {
+        skipSegments.add(ep.segmentIndex);
+      }
+    });
+
+    const anchor = this.getPathAnchorRef(path, undefined, skipSegments);
+    const anchorBefore = anchor ? this.getPathAnchorWorldPos(path, anchor) : null;
+
+    for (const ep of editPoints) {
+      if (ep.segmentIndex === undefined) continue;
+      const segment = path.path[ep.segmentIndex];
+      const command = segment[0];
+
+      if (command === 'M' || command === 'L') {
+        segment[1] = localPos.x;
+        segment[2] = localPos.y;
+      } else if (command === 'C') {
+        segment[5] = localPos.x;
+        segment[6] = localPos.y;
+      } else if (command === 'Q') {
+        segment[3] = localPos.x;
+        segment[4] = localPos.y;
+      }
+    }
+
+    path.set({ path: [...path.path] });
+    this.updateObjectDimensions(path);
+
+    if (anchorBefore && anchor) {
+      const anchorAfter = this.getPathAnchorWorldPos(path, anchor);
+      const diff = anchorAfter.subtract(anchorBefore);
+      path.left = (path.left ?? 0) - diff.x;
+      path.top = (path.top ?? 0) - diff.y;
+    }
+
+    path.dirty = true;
+    path.setCoords();
+    this.syncMarkersWithObject();
   }
 
   private getPathAnchorWorldPos(
@@ -1359,6 +1519,7 @@ export class EditTool extends BaseTool {
 
     this.markerManager?.clear();
     this.hitTester?.setEditPoints([]);
+    this.linkedAnchorGroups.clear();
 
     // Restore object state if there was a selected object
     if (this.selectedObject && this.canvas.getObjects().includes(this.selectedObject)) {

@@ -32,9 +32,7 @@ export interface SnapCallbacks {
 }
 
 export interface CanvasLockCallbacks {
-  onCanvasLockToggle: (enabled: boolean) => void;
   onUnlockCanvas: () => void;
-  isCanvasLocked: () => boolean;
 }
 
 export interface SettingsCallbacks {
@@ -52,7 +50,6 @@ export class DesktopSidebar {
   private canvasLockCallbacks: CanvasLockCallbacks | null = null;
   private settingsCallbacks: SettingsCallbacks | null = null;
   private snapEnabled: boolean = true;
-  private canvasLockEnabled: boolean = false;
   private undoBtn: HTMLButtonElement | null = null;
   private redoBtn: HTMLButtonElement | null = null;
   private lockStatusEl: HTMLElement | null = null;
@@ -63,7 +60,7 @@ export class DesktopSidebar {
     this.onToolSelect = onToolSelect;
 
     this.element = document.createElement('aside');
-    this.element.className = 'fixed left-0 top-0 h-full bg-surface border-r border-border z-sidebar hidden md:flex flex-col';
+    this.element.className = 'fixed left-0 top-0 h-full bg-surface border-r border-border z-sidebar flex flex-col';
     this.element.style.width = `${LAYOUT.sidebarWidth}px`;
 
     const header = document.createElement('div');
@@ -269,12 +266,13 @@ export class DesktopSidebar {
     container.appendChild(widthInputContainer);
 
     const snapRow = document.createElement('div');
-    snapRow.className = 'flex items-center gap-2 pt-2';
+    snapRow.className = 'flex items-center gap-3 pt-2';
 
     const snapInput = document.createElement('input');
     snapInput.type = 'checkbox';
     snapInput.id = 'global-snap-toggle';
     snapInput.checked = this.snapEnabled;
+    snapInput.className = 'modern-checkbox';
     snapInput.addEventListener('change', (e) => {
       const enabled = (e.target as HTMLInputElement).checked;
       this.snapEnabled = enabled;
@@ -283,7 +281,7 @@ export class DesktopSidebar {
     snapRow.appendChild(snapInput);
 
     const snapLabel = document.createElement('label');
-    snapLabel.className = 'text-xs text-textMuted';
+    snapLabel.className = 'text-sm text-textMuted';
     snapLabel.htmlFor = 'global-snap-toggle';
     snapLabel.textContent = 'Snap to endpoints';
     snapRow.appendChild(snapLabel);
@@ -310,29 +308,6 @@ export class DesktopSidebar {
     const importBtn = this.createActionButton('Import Image', 'import');
     importBtn.addEventListener('click', () => this.fileCallbacks?.onImport());
     buttonsContainer.appendChild(importBtn);
-
-    // Canvas Lock toggle
-    const lockRow = document.createElement('div');
-    lockRow.className = 'flex items-center gap-2 py-1';
-
-    const lockInput = document.createElement('input');
-    lockInput.type = 'checkbox';
-    lockInput.id = 'canvas-lock-toggle';
-    lockInput.checked = this.canvasLockEnabled;
-    lockInput.addEventListener('change', (e) => {
-      const enabled = (e.target as HTMLInputElement).checked;
-      this.canvasLockEnabled = enabled;
-      this.canvasLockCallbacks?.onCanvasLockToggle(enabled);
-    });
-    lockRow.appendChild(lockInput);
-
-    const lockLabel = document.createElement('label');
-    lockLabel.className = 'text-xs text-textMuted';
-    lockLabel.htmlFor = 'canvas-lock-toggle';
-    lockLabel.textContent = 'Lock export to image';
-    lockRow.appendChild(lockLabel);
-
-    buttonsContainer.appendChild(lockRow);
 
     // Lock status indicator
     this.lockStatusEl = document.createElement('div');
@@ -410,12 +385,6 @@ export class DesktopSidebar {
   setSnapEnabled(enabled: boolean): void {
     this.snapEnabled = enabled;
     const input = this.element.querySelector('#global-snap-toggle') as HTMLInputElement | null;
-    if (input) input.checked = enabled;
-  }
-
-  setCanvasLockEnabled(enabled: boolean): void {
-    this.canvasLockEnabled = enabled;
-    const input = this.element.querySelector('#canvas-lock-toggle') as HTMLInputElement | null;
     if (input) input.checked = enabled;
   }
 

@@ -1,4 +1,4 @@
-import { Polyline, Line, Circle, Point } from 'fabric';
+import { Polyline, Polygon, Line, Circle, Point } from 'fabric';
 import type { FabricObject } from 'fabric';
 import { ToolType } from '@/types';
 import type { TouchPoint } from '@/types';
@@ -15,9 +15,9 @@ export class PolylineTool extends BaseTool {
   private committedLines: Line[] = [];
   private ghostLine: Line | null = null;
   private pointMarkers: Circle[] = [];
-  private snapIndicator: Circle | null = null;
   private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
   private startSnap: { type: 'start' | 'end'; object: FabricObject } | null = null;
+  private endSnap: { type: 'start' | 'end'; object: FabricObject } | null = null;
 
   protected setupEventListeners(): void {
     if (!this.canvas) return;
@@ -50,6 +50,8 @@ export class PolylineTool extends BaseTool {
         obj.evented = true;
       });
     }
+
+    snapManager.hideSnapIndicator();
   }
 
   onMouseDown(point: Point, event: MouseEvent): void {
@@ -146,6 +148,15 @@ export class PolylineTool extends BaseTool {
       } else {
         this.startSnap = null;
       }
+    }
+
+    if (snapResult.snapped && snapResult.snapPoint?.object) {
+      this.endSnap = {
+        type: snapResult.snapPoint.type,
+        object: snapResult.snapPoint.object
+      };
+    } else {
+      this.endSnap = null;
     }
 
     // Add solid line segment from previous point to this one
@@ -258,42 +269,21 @@ export class PolylineTool extends BaseTool {
   }
 
   private updateSnapIndicator(x: number, y: number): void {
-    if (!this.canvas) return;
-
-    // Scale radius inversely with zoom to maintain consistent screen size
-    const zoom = this.canvas.getZoom();
-    const radius = 8 / zoom;
-    const strokeWidth = 2 / zoom;
-
-    if (!this.snapIndicator) {
-      this.snapIndicator = new Circle({
-        radius,
-        fill: 'transparent',
-        stroke: '#4a9eff',
-        strokeWidth,
-        originX: 'center',
-        originY: 'center',
-        selectable: false,
-        evented: false
-      });
-      (this.snapIndicator as any).isHelper = true;
-      this.canvas.add(this.snapIndicator);
-    }
-
-    this.snapIndicator.set({ left: x, top: y, radius, strokeWidth });
-    this.canvas.bringObjectToFront(this.snapIndicator);
-    this.canvas.requestRenderAll();
+    snapManager.showSnapIndicator(x, y);
   }
 
   private clearSnapIndicator(): void {
-    if (this.snapIndicator && this.canvas) {
-      this.canvas.remove(this.snapIndicator);
-      this.snapIndicator = null;
-    }
+    snapManager.hideSnapIndicator();
   }
 
   private finishDrawing(): void {
     if (!this.canvas || this.points.length < 2) {
+      this.cancelDrawing();
+      return;
+    }
+
+    const { points: finalPoints, closed } = this.getFinalPoints();
+    if (finalPoints.length < 2) {
       this.cancelDrawing();
       return;
     }
@@ -305,30 +295,28 @@ export class PolylineTool extends BaseTool {
     this.committedLines.forEach((line) => this.canvas!.remove(line));
     this.committedLines = [];
 
-    // If we snapped to an existing polyline endpoint, merge into it
-    if (this.startSnap?.object instanceof Polyline) {
-      const mergedPoints = this.mergeWithPolyline(this.startSnap.object, this.startSnap.type);
-      if (mergedPoints.length >= 2) {
-        this.canvas.remove(this.startSnap.object);
-        const merged = new Polyline(mergedPoints, {
-          stroke: this.startSnap.object.stroke ?? this.config?.strokeColor ?? '#ffffff',
-          strokeWidth: this.startSnap.object.strokeWidth ?? this.config?.strokeWidth ?? 2,
-          fill: 'transparent',
-          selectable: true,
-          evented: true
-        });
-        this.canvas.add(merged);
-        this.canvas.requestRenderAll();
-      }
+    const startTarget = this.startSnap?.object instanceof Polyline
+      ? { object: this.startSnap.object, type: this.startSnap.type }
+      : null;
+    const endTarget = this.endSnap?.object instanceof Polyline
+      ? { object: this.endSnap.object, type: this.endSnap.type }
+      : null;
+
+    if (startTarget || endTarget) {
+      this.mergeWithTargets(startTarget, endTarget, finalPoints);
     } else {
-      // Create final polyline object
-    const polyline = new Polyline(this.points, {
-      stroke: this.config?.strokeColor ?? '#ffffff',
-      strokeWidth: this.config?.strokeWidth ?? 2,
-      fill: 'transparent',
-      selectable: true,
-      evented: true
-    });
+      // Create final polyline/polygon object
+      const shapeOptions = {
+        stroke: this.config?.strokeColor ?? '#ffffff',
+        strokeWidth: this.config?.strokeWidth ?? 2,
+        fill: 'transparent',
+        selectable: true,
+        evented: true
+      };
+
+      const polyline = closed
+        ? new Polygon(finalPoints, shapeOptions)
+        : new Polyline(finalPoints, shapeOptions);
 
       this.canvas.add(polyline);
       this.canvas.requestRenderAll();
@@ -391,28 +379,106 @@ export class PolylineTool extends BaseTool {
     this.points = [];
     this.drawing = false;
     this.startSnap = null;
+    this.endSnap = null;
     this.context?.hideActionButton();
     this.context?.updateReticle(0, 0, false);
   }
 
-  private mergeWithPolyline(polyline: Polyline, snapType: 'start' | 'end'): Point[] {
-    const existingPoints = this.getCanvasPoints(polyline);
-    const newPoints = this.points;
+  private mergeWithTargets(
+    startTarget: { object: Polyline; type: 'start' | 'end' } | null,
+    endTarget: { object: Polyline; type: 'start' | 'end' } | null,
+    linePoints: Point[]
+  ): void {
+    if (!this.canvas) return;
 
-    if (existingPoints.length === 0) {
-      return newPoints;
+    const removeObjects: Set<Polyline> = new Set();
+    let stroke = this.config?.strokeColor ?? '#ffffff';
+    let strokeWidth = this.config?.strokeWidth ?? 2;
+
+    if (startTarget?.object) {
+      stroke = (startTarget.object.stroke as string) ?? stroke;
+      strokeWidth = (startTarget.object.strokeWidth as number) ?? strokeWidth;
+    } else if (endTarget?.object) {
+      stroke = (endTarget.object.stroke as string) ?? stroke;
+      strokeWidth = (endTarget.object.strokeWidth as number) ?? strokeWidth;
     }
 
-    const toAdd = newPoints.slice(1); // exclude snapped point
-    if (toAdd.length === 0) {
-      return existingPoints;
+    if (startTarget && endTarget && startTarget.object === endTarget.object) {
+      const existingPoints = this.getCanvasPoints(startTarget.object);
+      const lineOriented = startTarget.type === 'end' ? linePoints : [...linePoints].reverse();
+      let merged = [...existingPoints, ...lineOriented.slice(1)];
+      if (merged.length > 1 && this.isSamePoint(merged[0], merged[merged.length - 1])) {
+        merged = merged.slice(0, -1);
+      }
+
+      removeObjects.add(startTarget.object);
+      const closedShape = new Polygon(merged, {
+        stroke,
+        strokeWidth,
+        fill: 'transparent',
+        selectable: true,
+        evented: true
+      });
+
+      removeObjects.forEach((obj) => this.canvas!.remove(obj));
+      this.canvas.add(closedShape);
+      this.canvas.requestRenderAll();
+      return;
     }
 
-    if (snapType === 'end') {
-      return [...existingPoints, ...toAdd];
+    let mergedPoints: Point[] = [];
+
+    if (startTarget) {
+      const existing = this.getCanvasPoints(startTarget.object);
+      const oriented = startTarget.type === 'end' ? existing : [...existing].reverse();
+      mergedPoints = [...oriented];
+      removeObjects.add(startTarget.object);
     }
 
-    return [...toAdd.reverse(), ...existingPoints];
+    const lineStartIndex = startTarget ? 1 : 0;
+    const lineEndIndex = endTarget ? -1 : undefined;
+    const lineMiddle = linePoints.slice(lineStartIndex, lineEndIndex);
+    mergedPoints.push(...lineMiddle);
+
+    if (endTarget) {
+      const existing = this.getCanvasPoints(endTarget.object);
+      const oriented = endTarget.type === 'start' ? existing : [...existing].reverse();
+      mergedPoints.push(...oriented);
+      removeObjects.add(endTarget.object);
+    }
+
+    if (mergedPoints.length < 2) {
+      return;
+    }
+
+    removeObjects.forEach((obj) => this.canvas!.remove(obj));
+
+    const mergedPolyline = new Polyline(mergedPoints, {
+      stroke,
+      strokeWidth,
+      fill: 'transparent',
+      selectable: true,
+      evented: true
+    });
+
+    this.canvas.add(mergedPolyline);
+    this.canvas.requestRenderAll();
+  }
+
+  private getFinalPoints(): { points: Point[]; closed: boolean } {
+    if (this.points.length < 2) {
+      return { points: [...this.points], closed: false };
+    }
+
+    const first = this.points[0];
+    const last = this.points[this.points.length - 1];
+    const dist = Math.hypot(first.x - last.x, first.y - last.y);
+
+    if (dist <= 0.001) {
+      return { points: this.points.slice(0, -1), closed: true };
+    }
+
+    return { points: [...this.points], closed: false };
   }
 
   private getCanvasPoints(polyline: Polyline): Point[] {
@@ -425,6 +491,10 @@ export class PolylineTool extends BaseTool {
       const y = matrix[1] * (pt.x - pathOffset.x) + matrix[3] * (pt.y - pathOffset.y) + matrix[5];
       return new Point(x, y);
     });
+  }
+
+  private isSamePoint(a: Point, b: Point, epsilon: number = 0.001): boolean {
+    return Math.hypot(a.x - b.x, a.y - b.y) <= epsilon;
   }
 
   cancel(): void {

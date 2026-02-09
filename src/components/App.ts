@@ -1,19 +1,14 @@
 import { Point } from 'fabric';
 import { jsPDF } from 'jspdf';
 import { CanvasEngine, canvasLockManager } from '@/canvas';
-import { GestureManager, type GestureManagerCallbacks } from '@/gestures';
 import { ToolManager, type ToolManagerCallbacks } from '@/tools';
-import { ToolType, type ActionButtonMode } from '@/types';
-import { isMobileDevice, historyManager, snapManager, settingsManager } from '@/utils';
+import { ToolType } from '@/types';
+import { historyManager, snapManager, settingsManager } from '@/utils';
 import { MainLayout } from './layout/MainLayout';
 import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, type EditActionCallbacks, type CanvasLockCallbacks, type SettingsCallbacks } from './layout/DesktopSidebar';
 import { SettingsModal } from './layout/SettingsModal';
-import { MobileToolbar, type StrokeColorCallbacks as MobileStrokeColorCallbacks } from './layout/MobileToolbar';
 import { PropertiesPanel, type ProjectCallbacks } from './layout/PropertiesPanel';
-import { BottomSheet } from './layout/BottomSheet';
 import { CanvasContainer } from './canvas/CanvasContainer';
-import { Reticle } from './canvas/Reticle';
-import { ActionButton } from './controls/ActionButton';
 import { ImportManager } from '@/import';
 import { ExportManager } from '@/export';
 import { ClipboardManager } from '@/import';
@@ -25,16 +20,11 @@ export class App {
   private layout: MainLayout | null = null;
   private canvasContainer: CanvasContainer | null = null;
   private engine: CanvasEngine | null = null;
-  private gestureManager: GestureManager | null = null;
   private toolManager: ToolManager | null = null;
 
   private desktopSidebar: DesktopSidebar | null = null;
-  private mobileToolbar: MobileToolbar | null = null;
   private propertiesPanel: PropertiesPanel | null = null;
-  private bottomSheet: BottomSheet | null = null;
   private settingsModal: SettingsModal | null = null;
-  private reticle: Reticle | null = null;
-  private actionButton: ActionButton | null = null;
 
   private importManager: ImportManager;
   private exportManager: ExportManager;
@@ -80,7 +70,7 @@ export class App {
     }
 
     this.setupToolManager();
-    this.setupGestureManager();
+    this.setupMouseEvents();
     this.setupUI();
     this.setupCanvasEvents();
 
@@ -89,10 +79,9 @@ export class App {
 
   private setupToolManager(): void {
     const callbacks: ToolManagerCallbacks = {
-      showActionButton: (mode: ActionButtonMode) => this.actionButton?.show(mode),
-      hideActionButton: () => this.actionButton?.hide(),
-      updateReticle: (x: number, y: number, visible: boolean) =>
-        this.reticle?.update(x, y, visible)
+      showActionButton: () => {},
+      hideActionButton: () => {},
+      updateReticle: () => {}
     };
 
     this.toolManager = new ToolManager(callbacks);
@@ -101,34 +90,6 @@ export class App {
     if (canvas) {
       this.toolManager.setCanvas(canvas);
     }
-  }
-
-  private setupGestureManager(): void {
-    if (!this.canvasContainer || !this.engine || !this.toolManager) return;
-
-    const callbacks: GestureManagerCallbacks = {
-      onTap: (point) => {
-        this.toolManager?.handleTouchStart(point);
-        this.toolManager?.handleTouchEnd(point);
-      },
-      onDragStart: (point) => {
-        this.toolManager?.handleTouchStart(point);
-      },
-      onDragMove: (point, _delta) => {
-        this.toolManager?.handleTouchMove(point);
-      },
-      onDragEnd: (point) => {
-        this.toolManager?.handleTouchEnd(point);
-      }
-    };
-
-    this.gestureManager = new GestureManager(
-      this.canvasContainer.getElement(),
-      this.engine,
-      callbacks
-    );
-
-    this.setupMouseEvents();
   }
 
   private setupMouseEvents(): void {
@@ -315,15 +276,8 @@ export class App {
     if (!this.layout || !this.toolManager) return;
 
     const tools = this.toolManager.getAllTools();
-    const isMobile = isMobileDevice();
 
     this.desktopSidebar = new DesktopSidebar(
-      this.layout.getElement(),
-      tools,
-      this.handleToolSelect
-    );
-
-    this.mobileToolbar = new MobileToolbar(
       this.layout.getElement(),
       tools,
       this.handleToolSelect
@@ -359,13 +313,9 @@ export class App {
 
     // Set up canvas lock callbacks
     const canvasLockCallbacks: CanvasLockCallbacks = {
-      onCanvasLockToggle: (enabled: boolean) => {
-        canvasLockManager.setAutoLockEnabled(enabled);
-      },
       onUnlockCanvas: () => {
         canvasLockManager.unlock();
-      },
-      isCanvasLocked: () => canvasLockManager.isLocked()
+      }
     };
     this.desktopSidebar.setCanvasLockCallbacks(canvasLockCallbacks);
 
@@ -373,16 +323,6 @@ export class App {
     canvasLockManager.subscribe((state) => {
       this.desktopSidebar?.updateCanvasLockStatus(state.locked);
     });
-
-    this.mobileToolbar.setFileCallbacks(fileCallbacks);
-
-    // Set up mobile stroke color callbacks
-    const mobileStrokeCallbacks: MobileStrokeColorCallbacks = {
-      onStrokeColorChange: (color: string) => {
-        this.toolManager?.setConfig({ strokeColor: color });
-      }
-    };
-    this.mobileToolbar.setStrokeCallbacks(mobileStrokeCallbacks);
 
     // Set up edit action callbacks
     const editCallbacks: EditActionCallbacks = {
@@ -493,22 +433,8 @@ export class App {
     };
     this.propertiesPanel.setProjectCallbacks(projectCallbacks);
 
-    this.bottomSheet = new BottomSheet(
-      this.layout.getElement(),
-      propertyCallbacks
-    );
-
-    if (isMobile) {
-      this.reticle = new Reticle(this.layout.getElement());
-      this.actionButton = new ActionButton(this.layout.getElement(), {
-        onConfirm: () => this.toolManager?.handleActionConfirm(),
-        onCancel: () => this.toolManager?.handleActionCancel()
-      });
-    }
-
     this.toolManager.on('tool:changed', (tool) => {
       this.desktopSidebar?.setActiveTool(tool.type);
-      this.mobileToolbar?.setActiveTool(tool.type);
     });
   }
 
@@ -519,11 +445,6 @@ export class App {
     this.engine?.on('selection:changed', (objects) => {
       const selectedObject = objects[0] ?? null;
       this.propertiesPanel?.updateContent(selectedObject);
-      this.bottomSheet?.updateContent(selectedObject);
-
-      if (selectedObject && isMobileDevice()) {
-        this.bottomSheet?.showForSelection(selectedObject);
-      }
     });
   }
 
@@ -732,24 +653,15 @@ export class App {
 
     // Lock the canvas to the selected image
     canvasLockManager.lockToImage(activeObject as any);
-
-    // Also enable auto-lock and update the sidebar checkbox
-    canvasLockManager.setAutoLockEnabled(true);
-    this.desktopSidebar?.setCanvasLockEnabled(true);
   }
 
   destroy(): void {
     this.storageManager?.dispose();
-    this.gestureManager?.dispose();
     this.engine?.dispose();
     this.layout?.destroy();
     this.desktopSidebar?.destroy();
-    this.mobileToolbar?.destroy();
     this.propertiesPanel?.destroy();
-    this.bottomSheet?.destroy();
     this.settingsModal?.destroy();
-    this.reticle?.destroy();
-    this.actionButton?.destroy();
   }
 
   // Project management methods

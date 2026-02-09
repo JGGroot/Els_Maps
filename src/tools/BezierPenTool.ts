@@ -1,10 +1,18 @@
-import { Path, Circle, Line, Point } from 'fabric';
+import { Path, Polyline, Circle, Line, Point } from 'fabric';
 import type { FabricObject } from 'fabric';
 import { ToolType } from '@/types';
 import type { TouchPoint } from '@/types';
 import { BaseTool } from './BaseTool';
 import { LAYOUT } from '@/constants';
-import { snapManager, type SnapResult, type SnapPoint } from '@/utils';
+import {
+  snapManager,
+  buildPathString,
+  mergePathShapeWithTargets,
+  type SnapResult,
+  type SnapPoint,
+  type PathShape,
+  type MergeTarget
+} from '@/utils';
 
 interface BezierPoint {
   anchor: Point;
@@ -22,10 +30,11 @@ export class BezierPenTool extends BaseTool {
   private anchorMarkers: Circle[] = [];
   private handleLines: Line[] = [];
   private handleMarkers: Circle[] = [];
-  private snapIndicator: Circle | null = null;
   private isDragging: boolean = false;
   private currentDragPoint: Point | null = null;
   private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
+  private startSnap: { type: 'start' | 'end'; object: FabricObject } | null = null;
+  private endSnap: { type: 'start' | 'end'; object: FabricObject } | null = null;
 
   protected setupEventListeners(): void {
     if (!this.canvas) return;
@@ -58,6 +67,8 @@ export class BezierPenTool extends BaseTool {
         obj.evented = true;
       });
     }
+
+    snapManager.hideSnapIndicator();
   }
 
   onMouseDown(point: Point, event: MouseEvent): void {
@@ -175,6 +186,24 @@ export class BezierPenTool extends BaseTool {
       if (this.isMobile) {
         this.context?.showActionButton('both');
       }
+
+      if (snapResult.snapped && snapResult.snapPoint?.object) {
+        this.startSnap = {
+          type: snapResult.snapPoint.type,
+          object: snapResult.snapPoint.object
+        };
+      } else {
+        this.startSnap = null;
+      }
+    }
+
+    if (snapResult.snapped && snapResult.snapPoint?.object) {
+      this.endSnap = {
+        type: snapResult.snapPoint.type,
+        object: snapResult.snapPoint.object
+      };
+    } else {
+      this.endSnap = null;
     }
 
     const bezierPoint: BezierPoint = {
@@ -404,6 +433,35 @@ export class BezierPenTool extends BaseTool {
     this.snapLastAnchorIfNeeded();
     this.clearTemporaryObjects();
 
+    const shape = this.buildPathShape();
+    const startTarget = this.getMergeTarget(this.startSnap);
+    const endTarget = this.getMergeTarget(this.endSnap);
+
+    if (shape && (startTarget || endTarget)) {
+      const merged = mergePathShapeWithTargets(shape, startTarget ?? undefined, endTarget ?? undefined);
+      if (merged) {
+        const source = startTarget?.object ?? endTarget?.object ?? null;
+        const stroke = (source?.stroke as string) ?? this.config?.strokeColor ?? '#ffffff';
+        const strokeWidth = (source?.strokeWidth as number) ?? this.config?.strokeWidth ?? 2;
+
+        merged.remove.forEach((obj) => this.canvas!.remove(obj));
+
+        const pathData = buildPathString(merged.shape);
+        const finalPath = new Path(pathData, {
+          stroke,
+          strokeWidth,
+          fill: 'transparent',
+          selectable: true,
+          evented: true
+        });
+
+        this.canvas.add(finalPath);
+        this.canvas.requestRenderAll();
+        this.resetState();
+        return;
+      }
+    }
+
     const pathData = this.generatePathData();
 
     const finalPath = new Path(pathData, {
@@ -424,12 +482,24 @@ export class BezierPenTool extends BaseTool {
     if (this.bezierPoints.length === 0) return;
     const last = this.bezierPoints[this.bezierPoints.length - 1];
     const snapResult = snapManager.findNearestEndpoint(last.anchor);
-    if (!snapResult.snapped || !snapResult.snapPoint) return;
+    if (!snapResult.snapped || !snapResult.snapPoint) {
+      this.endSnap = null;
+      return;
+    }
 
     last.anchor = snapResult.point;
     const marker = this.anchorMarkers[this.anchorMarkers.length - 1];
     if (marker) {
       marker.set({ left: snapResult.point.x, top: snapResult.point.y });
+    }
+
+    if (snapResult.snapPoint.object) {
+      this.endSnap = {
+        type: snapResult.snapPoint.type,
+        object: snapResult.snapPoint.object
+      };
+    } else {
+      this.endSnap = null;
     }
   }
 
@@ -473,38 +543,11 @@ export class BezierPenTool extends BaseTool {
   }
 
   private updateSnapIndicator(x: number, y: number): void {
-    if (!this.canvas) return;
-
-    // Scale radius inversely with zoom to maintain consistent screen size
-    const zoom = this.canvas.getZoom();
-    const radius = 8 / zoom;
-    const strokeWidth = 2 / zoom;
-
-    if (!this.snapIndicator) {
-      this.snapIndicator = new Circle({
-        radius,
-        fill: 'transparent',
-        stroke: '#4a9eff',
-        strokeWidth,
-        originX: 'center',
-        originY: 'center',
-        selectable: false,
-        evented: false
-      });
-      (this.snapIndicator as any).isHelper = true;
-      this.canvas.add(this.snapIndicator);
-    }
-
-    this.snapIndicator.set({ left: x, top: y, radius, strokeWidth });
-    this.canvas.bringObjectToFront(this.snapIndicator);
-    this.canvas.requestRenderAll();
+    snapManager.showSnapIndicator(x, y);
   }
 
   private clearSnapIndicator(): void {
-    if (this.snapIndicator && this.canvas) {
-      this.canvas.remove(this.snapIndicator);
-      this.snapIndicator = null;
-    }
+    snapManager.hideSnapIndicator();
   }
 
   private resetState(): void {
@@ -512,8 +555,36 @@ export class BezierPenTool extends BaseTool {
     this.drawing = false;
     this.isDragging = false;
     this.currentDragPoint = null;
+    this.startSnap = null;
+    this.endSnap = null;
     this.context?.hideActionButton();
     this.context?.updateReticle(0, 0, false);
+  }
+
+  private getMergeTarget(
+    snap: { type: 'start' | 'end'; object: FabricObject } | null
+  ): MergeTarget | null {
+    if (!snap?.object) return null;
+    if (!(snap.object instanceof Path) && !(snap.object instanceof Polyline)) {
+      return null;
+    }
+    return { object: snap.object, type: snap.type };
+  }
+
+  private buildPathShape(): PathShape | null {
+    if (this.bezierPoints.length === 0) return null;
+    const start = this.bezierPoints[0].anchor;
+    const segments: PathShape['segments'] = [];
+
+    for (let i = 1; i < this.bezierPoints.length; i++) {
+      const prev = this.bezierPoints[i - 1];
+      const curr = this.bezierPoints[i];
+      const cp1 = prev.handleOut ?? prev.anchor;
+      const cp2 = curr.handleIn ?? curr.anchor;
+      segments.push({ cp1, cp2, end: curr.anchor });
+    }
+
+    return { start, segments };
   }
 
   cancel(): void {

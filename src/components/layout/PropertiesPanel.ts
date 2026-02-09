@@ -32,7 +32,7 @@ export class PropertiesPanel {
     this.callbacks = callbacks;
 
     this.element = document.createElement('aside');
-    this.element.className = 'fixed right-0 top-0 h-full bg-surface border-l border-border z-sidebar hidden md:flex flex-col';
+    this.element.className = 'fixed right-0 top-0 h-full bg-surface border-l border-border z-sidebar flex flex-col';
     this.element.style.width = `${LAYOUT.sidebarWidth}px`;
 
     const header = document.createElement('div');
