@@ -15,6 +15,15 @@ export interface CanvasState {
   isDirty: boolean;
 }
 
+export interface LockedCanvasState {
+  locked: boolean;
+  width: number;
+  height: number;
+  imageId: string | null;
+  offsetX: number;
+  offsetY: number;
+}
+
 export interface ViewportBounds {
   left: number;
   top: number;

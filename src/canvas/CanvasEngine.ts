@@ -1,7 +1,12 @@
 import { Canvas, FabricObject, Point, Polyline, Path } from 'fabric';
 import type { CanvasConfig, CanvasEventType, CanvasEngineEvents } from '@/types';
 import { CANVAS_DEFAULTS, ZOOM } from '@/constants';
-import { clamp } from '@/utils';
+import {
+  clamp,
+  applyPostLoadVisualState,
+  CANVAS_OBJECT_PROPS,
+  getThemeCanvasBackground
+} from '@/utils';
 import { themeManager } from '@/utils/ThemeManager';
 
 type EventCallback<T extends CanvasEventType> = (
@@ -41,7 +46,7 @@ export class CanvasEngine {
     this.canvas = new Canvas(canvasEl, {
       width,
       height,
-      backgroundColor: config?.backgroundColor ?? this.getThemeBackgroundColor(),
+      backgroundColor: config?.backgroundColor ?? getThemeCanvasBackground(),
       selection: config?.selection ?? true,
       preserveObjectStacking: config?.preserveObjectStacking ?? true,
       selectionColor: CANVAS_DEFAULTS.selectionColor,
@@ -73,14 +78,10 @@ export class CanvasEngine {
     this.resizeObserver.observe(this.container);
   }
 
-  private getThemeBackgroundColor(): string {
-    return themeManager.getTheme() === 'dark' ? '#1a1a1a' : '#f5f5f5';
-  }
-
   private setupThemeListener(): void {
-    this.themeUnsubscribe = themeManager.subscribe((theme) => {
+    this.themeUnsubscribe = themeManager.subscribe((_theme) => {
       if (this.canvas) {
-        this.canvas.backgroundColor = theme === 'dark' ? '#1a1a1a' : '#f5f5f5';
+        this.canvas.backgroundColor = getThemeCanvasBackground();
         this.canvas.requestRenderAll();
       }
     });
@@ -206,13 +207,13 @@ export class CanvasEngine {
   }
 
   toJSON(): object {
-    return this.canvas?.toObject() ?? {};
+    return this.canvas?.toObject([...CANVAS_OBJECT_PROPS]) ?? {};
   }
 
   async loadFromJSON(json: object): Promise<void> {
     if (!this.canvas) return;
     await this.canvas.loadFromJSON(json);
-    this.canvas.requestRenderAll();
+    applyPostLoadVisualState(this.canvas);
   }
 
   toDataURL(options?: { format?: 'png' | 'jpeg'; quality?: number; multiplier?: number }): string {

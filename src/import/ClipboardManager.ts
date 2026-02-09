@@ -64,6 +64,7 @@ export class ClipboardManager {
     try {
       const dataUrl = await this.blobToDataUrl(blob);
       const img = await FabricImage.fromURL(dataUrl);
+      canvasLockManager.ensureImageId(img);
 
       // No scaling - preserve full original quality for lossless workflow
 

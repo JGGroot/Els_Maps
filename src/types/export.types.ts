@@ -28,6 +28,7 @@ export interface ImportOptions {
 export interface ProjectData {
   version: string;
   canvas: object;
+  lockState?: import('./canvas.types').LockedCanvasState;
   metadata: {
     createdAt: string;
     modifiedAt: string;

@@ -1,5 +1,7 @@
 import type { FabricObject } from 'fabric';
 import { LAYOUT } from '@/constants';
+import type { ToastManager } from '@/components/controls/ToastManager';
+import type { ConfirmModal } from '@/components/controls/ConfirmModal';
 
 export interface PropertiesPanelCallbacks {
   onStrokeColorChange: (color: string) => void;
@@ -18,6 +20,8 @@ export interface ProjectCallbacks {
   onDeleteProject: (id: string) => Promise<boolean>;
   onListProjects: () => Promise<Array<{ id: string; name: string; modifiedAt: number; preview?: string }>>;
   getCurrentProjectId: () => string | null;
+  onLoadAutosave?: () => Promise<boolean>;
+  getAutosaveInfo?: () => Promise<{ savedAt: number; preview?: string } | null>;
 }
 
 export class PropertiesPanel {
@@ -27,6 +31,8 @@ export class PropertiesPanel {
   private shortcutsEl: HTMLElement;
   private callbacks: PropertiesPanelCallbacks;
   private projectCallbacks: ProjectCallbacks | null = null;
+  private toastManager: ToastManager | null = null;
+  private confirmModal: ConfirmModal | null = null;
 
   constructor(parent: HTMLElement, callbacks: PropertiesPanelCallbacks) {
     this.callbacks = callbacks;
@@ -61,6 +67,14 @@ export class PropertiesPanel {
     this.refreshProjectsList();
   }
 
+  setToastManager(toastManager: ToastManager): void {
+    this.toastManager = toastManager;
+  }
+
+  setConfirmModal(confirmModal: ConfirmModal): void {
+    this.confirmModal = confirmModal;
+  }
+
   private createProjectsSection(): HTMLElement {
     const section = document.createElement('div');
     section.className = 'p-4 border-t border-border';
@@ -84,15 +98,13 @@ export class PropertiesPanel {
     newBtn.className = 'flex-1 px-2 py-1.5 bg-charcoal-light hover:bg-charcoal-lighter rounded text-xs text-foreground transition-colors';
     newBtn.textContent = 'New';
     newBtn.addEventListener('click', async () => {
-      if (confirm('Start a new project? Unsaved changes will be lost.')) {
-        await this.projectCallbacks?.onNewProject();
-        this.refreshProjectsList();
-      }
+      await this.projectCallbacks?.onNewProject();
+      this.refreshProjectsList();
     });
     actionsRow.appendChild(newBtn);
 
     const saveBtn = document.createElement('button');
-    saveBtn.className = 'flex-1 px-2 py-1.5 bg-accent hover:bg-accent/80 rounded text-xs text-white transition-colors';
+    saveBtn.className = 'save-btn flex-1 px-2 py-1.5 bg-accent hover:bg-accent/80 rounded text-xs text-white transition-colors';
     saveBtn.textContent = 'Save';
     saveBtn.addEventListener('click', async () => {
       const currentId = this.projectCallbacks?.getCurrentProjectId();
@@ -112,6 +124,7 @@ export class PropertiesPanel {
 
       const success = await this.projectCallbacks?.onSaveProject(name);
       if (success) {
+        this.animateSaveButton(saveBtn);
         this.showToast('Project saved!');
         this.refreshProjectsList();
       }
@@ -151,13 +164,52 @@ export class PropertiesPanel {
 
     const projects = await this.projectCallbacks.onListProjects();
     const currentId = this.projectCallbacks.getCurrentProjectId();
-
-    if (projects.length === 0) {
-      listContainer.innerHTML = '<p class="text-xs text-textMuted">No saved projects</p>';
-      return;
-    }
+    const autosaveInfo = await this.projectCallbacks.getAutosaveInfo?.();
 
     listContainer.innerHTML = '';
+
+    if (autosaveInfo) {
+      const row = document.createElement('div');
+      row.className = 'flex items-center justify-between p-2 rounded text-xs bg-accent/20 border border-accent/40 transition-colors cursor-pointer';
+
+      const info = document.createElement('div');
+      info.className = 'flex-1 min-w-0';
+
+      const name = document.createElement('div');
+      name.className = 'text-foreground truncate font-semibold';
+      name.textContent = 'Autosaved';
+      info.appendChild(name);
+
+      const date = document.createElement('div');
+      date.className = 'text-textMuted text-[10px]';
+      date.textContent = new Date(autosaveInfo.savedAt).toLocaleString();
+      info.appendChild(date);
+
+      row.appendChild(info);
+
+      const badge = document.createElement('div');
+      badge.className = 'text-[10px] uppercase tracking-wide text-accent';
+      badge.textContent = 'Pinned';
+      row.appendChild(badge);
+
+      row.addEventListener('click', async () => {
+        if (!this.projectCallbacks?.onLoadAutosave) return;
+        const success = await this.projectCallbacks.onLoadAutosave();
+        if (success) {
+          this.showToast('Autosave restored!');
+          this.refreshProjectsList();
+        }
+      });
+
+      listContainer.appendChild(row);
+    }
+
+    if (projects.length === 0) {
+      if (!autosaveInfo) {
+        listContainer.innerHTML = '<p class="text-xs text-textMuted">No saved projects</p>';
+      }
+      return;
+    }
 
     projects.forEach((project) => {
       const row = document.createElement('div');
@@ -197,10 +249,18 @@ export class PropertiesPanel {
       deleteBtn.title = 'Delete project';
       deleteBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (confirm(`Delete "${project.name}"?`)) {
-          await this.projectCallbacks?.onDeleteProject(project.id);
-          this.refreshProjectsList();
-        }
+        const confirmed = this.confirmModal
+          ? await this.confirmModal.open({
+              title: 'Delete project?',
+              message: `Delete "${project.name}"? This cannot be undone.`,
+              confirmLabel: 'Delete',
+              cancelLabel: 'Cancel',
+              tone: 'danger'
+            })
+          : confirm(`Delete "${project.name}"?`);
+        if (!confirmed) return;
+        await this.projectCallbacks?.onDeleteProject(project.id);
+        this.refreshProjectsList();
       });
       row.appendChild(deleteBtn);
 
@@ -209,6 +269,11 @@ export class PropertiesPanel {
   }
 
   private showToast(message: string): void {
+    if (this.toastManager) {
+      this.toastManager.showToast({ title: message });
+      return;
+    }
+
     const toast = document.createElement('div');
     toast.className = 'fixed bottom-4 right-4 bg-accent text-white px-4 py-2 rounded shadow-lg z-50 animate-fade-in';
     toast.textContent = message;
@@ -219,11 +284,23 @@ export class PropertiesPanel {
     }, 2000);
   }
 
+  private animateSaveButton(button: HTMLButtonElement): void {
+    const originalText = button.textContent ?? 'Save';
+    button.textContent = 'Saved!';
+    button.classList.add('is-saved');
+
+    window.setTimeout(() => {
+      button.textContent = originalText;
+      button.classList.remove('is-saved');
+    }, 1200);
+  }
+
   private async showProjectsModal(): Promise<void> {
     if (!this.projectCallbacks) return;
 
     const projects = await this.projectCallbacks.onListProjects();
     const currentId = this.projectCallbacks.getCurrentProjectId();
+    const autosaveInfo = await this.projectCallbacks.getAutosaveInfo?.();
 
     const modal = document.createElement('div');
     modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4';
@@ -242,11 +319,50 @@ export class PropertiesPanel {
     const gridContainer = document.createElement('div');
     gridContainer.className = 'flex-1 overflow-y-auto';
 
-    if (projects.length === 0) {
+    if (projects.length === 0 && !autosaveInfo) {
       gridContainer.innerHTML = '<p class="text-textMuted text-center py-8">No saved projects yet</p>';
     } else {
       const grid = document.createElement('div');
       grid.className = 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4';
+
+      if (autosaveInfo) {
+        const card = document.createElement('div');
+        card.className = 'bg-charcoal rounded-lg overflow-hidden cursor-pointer transition-all hover:ring-2 hover:ring-accent relative';
+
+        const badge = document.createElement('div');
+        badge.className = 'absolute top-2 left-2 bg-accent text-white text-[10px] px-2 py-1 rounded-full uppercase';
+        badge.textContent = 'Autosaved';
+        card.appendChild(badge);
+
+        const preview = document.createElement('div');
+        preview.className = 'aspect-video bg-charcoal-dark flex items-center justify-center';
+        if (autosaveInfo.preview) {
+          preview.innerHTML = `<img src="${autosaveInfo.preview}" alt="Autosaved preview" class="w-full h-full object-contain" />`;
+        } else {
+          preview.innerHTML = '<span class="text-textMuted text-xs">No preview</span>';
+        }
+        card.appendChild(preview);
+
+        const info = document.createElement('div');
+        info.className = 'p-3';
+        info.innerHTML = `
+          <div class="text-foreground text-sm font-medium truncate">Autosaved</div>
+          <div class="text-textMuted text-xs">${new Date(autosaveInfo.savedAt).toLocaleString()}</div>
+        `;
+        card.appendChild(info);
+
+        card.addEventListener('click', async () => {
+          if (!this.projectCallbacks?.onLoadAutosave) return;
+          const success = await this.projectCallbacks.onLoadAutosave();
+          if (success) {
+            this.showToast('Autosave restored!');
+            this.refreshProjectsList();
+            modal.remove();
+          }
+        });
+
+        grid.appendChild(card);
+      }
 
       // Sort by modifiedAt descending (newest first)
       const sortedProjects = [...projects].sort((a, b) => b.modifiedAt - a.modifiedAt);

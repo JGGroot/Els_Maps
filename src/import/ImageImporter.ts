@@ -11,6 +11,7 @@ export class ImageImporter {
     try {
       const dataUrl = await this.fileToDataUrl(file);
       const img = await FabricImage.fromURL(dataUrl);
+      canvasLockManager.ensureImageId(img);
 
       if (options?.maxWidth || options?.maxHeight) {
         this.scaleImage(img, options);

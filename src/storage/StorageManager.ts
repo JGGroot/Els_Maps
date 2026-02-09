@@ -1,6 +1,12 @@
 import type { Canvas } from 'fabric';
 import { LocalStorageAdapter } from './LocalStorageAdapter';
 import { IndexedDBAdapter } from './IndexedDBAdapter';
+import { canvasLockManager } from '@/canvas';
+import {
+  applyPostLoadVisualState,
+  restoreCanvasLockState,
+  CANVAS_OBJECT_PROPS
+} from '@/utils';
 
 const AUTOSAVE_KEY = 'autosave';
 const AUTOSAVE_INTERVAL = 30000; // 30 seconds
@@ -40,9 +46,21 @@ export class StorageManager {
     if (!this.canvas) return false;
 
     try {
-      const data = this.canvas.toObject();
+      if (this.isCanvasEmpty()) {
+        await this.clearAutosave();
+        return false;
+      }
+
+      const data = this.canvas.toObject([...CANVAS_OBJECT_PROPS]);
+      const preview = this.canvas.toDataURL({
+        format: 'png',
+        quality: 0.6,
+        multiplier: 0.2
+      });
       await this.indexedDB.set(AUTOSAVE_KEY, {
         canvas: data,
+        lockState: canvasLockManager.getLockedState(),
+        preview,
         savedAt: Date.now()
       });
       return true;
@@ -56,14 +74,20 @@ export class StorageManager {
     if (!this.canvas) return false;
 
     try {
-      const data = await this.indexedDB.get<{ canvas: object; savedAt: number }>(
+      const data = await this.indexedDB.get<{
+        canvas: object;
+        lockState?: ReturnType<typeof canvasLockManager.getLockedState>;
+        preview?: string;
+        savedAt: number;
+      }>(
         AUTOSAVE_KEY
       );
 
       if (!data) return false;
 
       await this.canvas.loadFromJSON(data.canvas);
-      this.canvas.requestRenderAll();
+      applyPostLoadVisualState(this.canvas);
+      restoreCanvasLockState(this.canvas, data.lockState ?? null);
       return true;
     } catch (error) {
       console.error('Load autosave failed:', error);
@@ -74,6 +98,15 @@ export class StorageManager {
   async hasAutosave(): Promise<boolean> {
     const data = await this.indexedDB.get(AUTOSAVE_KEY);
     return data !== null;
+  }
+
+  async getAutosaveInfo(): Promise<{ savedAt: number; preview?: string } | null> {
+    const data = await this.indexedDB.get<{
+      savedAt: number;
+      preview?: string;
+    }>(AUTOSAVE_KEY);
+    if (!data) return null;
+    return { savedAt: data.savedAt, preview: data.preview };
   }
 
   async clearAutosave(): Promise<boolean> {
@@ -106,7 +139,8 @@ export class StorageManager {
       }>(`project:${id}`);
 
       const data = {
-        canvas: this.canvas.toObject(),
+        canvas: this.canvas.toObject([...CANVAS_OBJECT_PROPS]),
+        lockState: canvasLockManager.getLockedState(),
         preview,
         metadata: {
           name,
@@ -129,13 +163,15 @@ export class StorageManager {
     try {
       const data = await this.indexedDB.get<{
         canvas: object;
+        lockState?: ReturnType<typeof canvasLockManager.getLockedState>;
         metadata: { name: string; createdAt: number; modifiedAt: number };
       }>(`project:${id}`);
 
       if (!data) return false;
 
       await this.canvas.loadFromJSON(data.canvas);
-      this.canvas.requestRenderAll();
+      applyPostLoadVisualState(this.canvas);
+      restoreCanvasLockState(this.canvas, data.lockState ?? null);
       return true;
     } catch (error) {
       console.error('Load project failed:', error);
@@ -177,5 +213,10 @@ export class StorageManager {
   dispose(): void {
     this.stopAutosave();
     this.canvas = null;
+  }
+
+  private isCanvasEmpty(): boolean {
+    if (!this.canvas) return true;
+    return this.canvas.getObjects().every((obj) => (obj as any).isHelper);
   }
 }

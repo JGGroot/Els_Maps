@@ -1,8 +1,12 @@
 import type { Canvas, FabricObject } from 'fabric';
+import type { LockedCanvasState } from '@/types';
+import { canvasLockManager } from '@/canvas';
+import { applyPostLoadVisualState, restoreCanvasLockState, CANVAS_OBJECT_PROPS } from './canvasPersistence';
 
 export interface HistoryState {
   json: object;
   timestamp: number;
+  lockState?: LockedCanvasState;
 }
 
 export class HistoryManager {
@@ -57,11 +61,12 @@ export class HistoryManager {
     }
 
     // Serialize entire canvas state
-    const json = this.canvas.toJSON();
+    const json = this.canvas.toObject([...CANVAS_OBJECT_PROPS]);
 
     this.history.push({
       json,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      lockState: canvasLockManager.getLockedState()
     });
 
     // Limit history size
@@ -71,7 +76,6 @@ export class HistoryManager {
     }
 
     this.currentIndex = this.history.length - 1;
-    this.isDirty = false;
   }
 
   undo(): boolean {
@@ -120,7 +124,10 @@ export class HistoryManager {
     this.canvas
       .loadFromJSON(state.json)
       .then(() => {
-        this.canvas?.requestRenderAll();
+        if (this.canvas) {
+          applyPostLoadVisualState(this.canvas);
+          restoreCanvasLockState(this.canvas, state.lockState ?? null);
+        }
       })
       .catch((error) => {
         console.error('Failed to restore canvas state:', error);
@@ -136,6 +143,10 @@ export class HistoryManager {
 
   getIsDirty(): boolean {
     return this.isDirty;
+  }
+
+  markClean(): void {
+    this.isDirty = false;
   }
 
   private scheduleSave(): void {

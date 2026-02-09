@@ -1,5 +1,6 @@
 import type { Canvas } from 'fabric';
 import type { ProjectData } from '@/types';
+import { applyPostLoadVisualState, restoreCanvasLockState } from '@/utils';
 
 export class JSONImporter {
   async import(canvas: Canvas, file: File): Promise<ProjectData | null> {
@@ -12,7 +13,8 @@ export class JSONImporter {
       }
 
       await canvas.loadFromJSON(data.canvas);
-      canvas.requestRenderAll();
+      applyPostLoadVisualState(canvas);
+      restoreCanvasLockState(canvas, data.lockState);
 
       return data;
     } catch (error) {

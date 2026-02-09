@@ -14,6 +14,9 @@ import { ExportManager } from '@/export';
 import { ClipboardManager } from '@/import';
 import { StorageManager } from '@/storage';
 import { ExportFormat, type ExportOptions } from '@/types';
+import { ConfirmModal } from './controls/ConfirmModal';
+import { ToastManager } from './controls/ToastManager';
+import { UnsavedChangesModal, type UnsavedChoice } from './controls/UnsavedChangesModal';
 
 export class App {
   private container: HTMLElement;
@@ -25,6 +28,9 @@ export class App {
   private desktopSidebar: DesktopSidebar | null = null;
   private propertiesPanel: PropertiesPanel | null = null;
   private settingsModal: SettingsModal | null = null;
+  private confirmModal: ConfirmModal | null = null;
+  private toastManager: ToastManager | null = null;
+  private unsavedModal: UnsavedChangesModal | null = null;
 
   private importManager: ImportManager;
   private exportManager: ExportManager;
@@ -45,6 +51,9 @@ export class App {
 
   async init(): Promise<void> {
     this.layout = new MainLayout(this.container);
+    this.confirmModal = new ConfirmModal(this.layout.getElement());
+    this.toastManager = new ToastManager(this.layout.getElement());
+    this.unsavedModal = new UnsavedChangesModal(this.layout.getElement());
 
     this.canvasContainer = new CanvasContainer(this.layout.getCanvasArea());
     this.engine = await this.canvasContainer.init();
@@ -59,7 +68,15 @@ export class App {
       // Check for autosave and offer to restore
       const hasAutosave = await this.storageManager.hasAutosave();
       if (hasAutosave) {
-        const restore = confirm('Found an autosaved session. Would you like to restore it?');
+        const restore = this.confirmModal
+          ? await this.confirmModal.open({
+              title: 'Restore autosave?',
+              message: 'We found an autosaved session from your last visit.',
+              confirmLabel: 'Restore',
+              cancelLabel: 'Start fresh'
+            })
+          : confirm('Found an autosaved session. Would you like to restore it?');
+
         if (restore) {
           await this.storageManager.loadAutosave();
         }
@@ -346,7 +363,19 @@ export class App {
           );
         }
       },
-      onClearAll: () => {
+      onClearAll: async () => {
+        const confirmed = this.confirmModal
+          ? await this.confirmModal.open({
+              title: 'Clear all drawings?',
+              message: 'This cannot be undone.',
+              confirmLabel: 'Clear All',
+              cancelLabel: 'Cancel',
+              tone: 'danger'
+            })
+          : confirm('Clear all drawings? This cannot be undone.');
+
+        if (!confirmed) return;
+
         const canvas = this.engine?.getCanvas();
         if (canvas) {
           canvas.clear();
@@ -421,12 +450,37 @@ export class App {
       this.layout.getElement(),
       propertyCallbacks
     );
+    if (this.toastManager) {
+      this.propertiesPanel.setToastManager(this.toastManager);
+    }
+    if (this.confirmModal) {
+      this.propertiesPanel.setConfirmModal(this.confirmModal);
+    }
 
     // Set up project callbacks
     const projectCallbacks: ProjectCallbacks = {
-      onNewProject: () => this.newProject(),
+      onNewProject: async () => {
+        const proceed = await this.handleUnsavedBeforeOpen();
+        if (!proceed) return;
+        await this.newProject();
+      },
       onSaveProject: (name: string) => this.saveProject(name),
-      onLoadProject: (id: string) => this.loadProject(id),
+      onLoadProject: async (id: string) => {
+        const proceed = await this.handleUnsavedBeforeOpen();
+        if (!proceed) return false;
+        return this.loadProject(id);
+      },
+      onLoadAutosave: async () => {
+        const proceed = await this.handleUnsavedBeforeOpen();
+        if (!proceed) return false;
+        const success = await this.storageManager.loadAutosave();
+        if (success) {
+          this.currentProjectId = null;
+          historyManager.clear();
+        }
+        return success;
+      },
+      getAutosaveInfo: () => this.storageManager.getAutosaveInfo(),
       onDeleteProject: (id: string) => this.deleteProject(id),
       onListProjects: () => this.listProjects(),
       getCurrentProjectId: () => this.getCurrentProjectId()
@@ -588,6 +642,7 @@ export class App {
       ]);
 
       console.log('Image copied to clipboard');
+      this.toastManager?.showCopyToast(dataUrl);
     } catch (error) {
       console.error('Clipboard copy error:', error);
     }
@@ -631,7 +686,9 @@ export class App {
     const activeObjects = canvas.getActiveObjects();
     activeObjects.forEach((obj) => {
       if (obj.type !== 'image') return;
+      canvasLockManager.ensureImageId(obj as any);
       obj.set({
+        __elsLocked: locked,
         lockMovementX: locked,
         lockMovementY: locked,
         lockScalingX: locked,
@@ -670,6 +727,7 @@ export class App {
     const success = await this.storageManager.saveProject(id, name);
     if (success) {
       this.currentProjectId = id;
+      historyManager.markClean();
     }
     return success;
   }
@@ -707,5 +765,45 @@ export class App {
 
   getCurrentProjectId(): string | null {
     return this.currentProjectId;
+  }
+
+  private async handleUnsavedBeforeOpen(): Promise<boolean> {
+    if (!historyManager.getIsDirty()) return true;
+    if (this.isCanvasEmpty()) return true;
+
+    let choice: UnsavedChoice = 'cancel';
+    if (this.unsavedModal) {
+      choice = await this.unsavedModal.open();
+    } else {
+      choice = confirm('Save changes before continuing?') ? 'save' : 'discard';
+    }
+
+    if (choice === 'cancel') return false;
+    if (choice === 'discard') return true;
+
+    return this.saveCurrentProjectForPrompt();
+  }
+
+  private isCanvasEmpty(): boolean {
+    const canvas = this.engine?.getCanvas();
+    if (!canvas) return true;
+    return canvas.getObjects().every((obj) => (obj as any).isHelper);
+  }
+
+  private async saveCurrentProjectForPrompt(): Promise<boolean> {
+    const currentId = this.currentProjectId;
+    let name = 'Untitled Project';
+
+    if (currentId) {
+      const projects = await this.storageManager.listProjects();
+      const existing = projects.find((p) => p.id === currentId);
+      name = existing?.name ?? name;
+    } else {
+      const inputName = prompt('Project name:', name);
+      if (!inputName) return false;
+      name = inputName;
+    }
+
+    return this.saveProject(name);
   }
 }

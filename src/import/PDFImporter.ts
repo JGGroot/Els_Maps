@@ -1,5 +1,6 @@
 import { FabricImage, type Canvas } from 'fabric';
 import * as pdfjsLib from 'pdfjs-dist';
+import { canvasLockManager } from '@/canvas';
 
 // Set up the worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -79,6 +80,7 @@ export class PDFImporter {
       // Convert to data URL and create Fabric image
       const dataUrl = renderCanvas.toDataURL('image/png', 1.0);
       const img = await FabricImage.fromURL(dataUrl);
+      canvasLockManager.ensureImageId(img);
 
       // Center on canvas
       const canvasCenter = canvas.getCenterPoint();

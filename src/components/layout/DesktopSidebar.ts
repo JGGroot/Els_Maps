@@ -165,11 +165,7 @@ export class DesktopSidebar {
 
     // Clear all button
     const clearBtn = this.createActionButton('Clear All', 'clear');
-    clearBtn.addEventListener('click', () => {
-      if (confirm('Clear all drawings? This cannot be undone.')) {
-        this.editCallbacks?.onClearAll();
-      }
-    });
+    clearBtn.addEventListener('click', () => this.editCallbacks?.onClearAll());
     buttonsContainer.appendChild(clearBtn);
 
     section.appendChild(buttonsContainer);

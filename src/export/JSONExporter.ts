@@ -1,14 +1,17 @@
 import type { Canvas } from 'fabric';
 import type { ExportResult, ProjectData } from '@/types';
+import { canvasLockManager } from '@/canvas';
+import { CANVAS_OBJECT_PROPS } from '@/utils';
 
 export class JSONExporter {
   export(canvas: Canvas, projectName: string = 'Untitled'): ExportResult {
     try {
-      const canvasData = canvas.toObject();
+      const canvasData = canvas.toObject([...CANVAS_OBJECT_PROPS]);
 
       const projectData: ProjectData = {
         version: '1.0.0',
         canvas: canvasData,
+        lockState: canvasLockManager.getLockedState(),
         metadata: {
           createdAt: new Date().toISOString(),
           modifiedAt: new Date().toISOString(),

@@ -1,13 +1,5 @@
 import type { Canvas, FabricImage } from 'fabric';
-
-export interface LockedCanvasState {
-  locked: boolean;
-  width: number;
-  height: number;
-  imageId: string | null;
-  offsetX: number;
-  offsetY: number;
-}
+import type { LockedCanvasState } from '@/types';
 
 type LockChangeCallback = (state: LockedCanvasState) => void;
 
@@ -36,9 +28,19 @@ class CanvasLockManagerClass {
     this.autoLockEnabled = enabled;
   }
 
+  ensureImageId(image: FabricImage): string {
+    const existing = (image as FabricImage & { __elsImageId?: string }).__elsImageId;
+    if (existing) return existing;
+
+    const id = `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    (image as FabricImage & { __elsImageId?: string }).__elsImageId = id;
+    return id;
+  }
+
   lockToImage(image: FabricImage): void {
     if (!this.canvas) return;
 
+    const imageId = this.ensureImageId(image);
     const imgWidth = (image.width ?? 0) * (image.scaleX ?? 1);
     const imgHeight = (image.height ?? 0) * (image.scaleY ?? 1);
 
@@ -68,7 +70,7 @@ class CanvasLockManagerClass {
       locked: true,
       width: imgWidth,
       height: imgHeight,
-      imageId: (image as any).__uid ?? null,
+      imageId,
       offsetX,
       offsetY
     };
