@@ -122,6 +122,11 @@ export class App {
     const canvasEl = this.canvasContainer?.getElement();
     if (!canvasEl) return;
 
+    // Prevent browser default drag behavior (fixes Edge showing ghost image when dragging)
+    canvasEl.setAttribute('draggable', 'false');
+    canvasEl.addEventListener('dragstart', (e) => e.preventDefault());
+    canvasEl.addEventListener('selectstart', (e) => e.preventDefault());
+
     // Track spacebar key state
     let spacePressed = false;
     const isEditingText = (): boolean => {
