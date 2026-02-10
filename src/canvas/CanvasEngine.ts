@@ -41,6 +41,12 @@ export class CanvasEngine {
     canvasEl.id = 'main-canvas';
     container.appendChild(canvasEl);
 
+    // Prevent browser native drag behavior (fixes Edge ghost image issue)
+    container.setAttribute('draggable', 'false');
+    container.addEventListener('dragstart', (e) => e.preventDefault());
+    canvasEl.setAttribute('draggable', 'false');
+    canvasEl.addEventListener('dragstart', (e) => e.preventDefault());
+
     const { width, height } = container.getBoundingClientRect();
 
     this.canvas = new Canvas(canvasEl, {
@@ -56,6 +62,13 @@ export class CanvasEngine {
       stopContextMenu: true,
       fireRightClick: true
     });
+
+    // Also prevent drag on Fabric's upper canvas (the interactive layer)
+    const upperCanvas = this.canvas.upperCanvasEl;
+    if (upperCanvas) {
+      upperCanvas.setAttribute('draggable', 'false');
+      upperCanvas.addEventListener('dragstart', (e) => e.preventDefault());
+    }
 
     this.setupResizeObserver();
     this.setupCanvasEvents();
