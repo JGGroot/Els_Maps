@@ -133,8 +133,10 @@ export class App {
 
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' && !e.repeat) {
-        // Don't intercept spacebar when editing text
+        // Don't intercept spacebar when editing text or typing in inputs
         if (isEditingText()) return;
+        const activeEl = document.activeElement;
+        if (activeEl instanceof HTMLInputElement || activeEl instanceof HTMLTextAreaElement) return;
         e.preventDefault();
         spacePressed = true;
         canvasEl.style.cursor = 'grab';

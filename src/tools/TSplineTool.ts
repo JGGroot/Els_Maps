@@ -21,6 +21,7 @@ export class TSplineTool extends BaseTool {
 
   private controlPoints: Point[] = [];
   private previewPath: Path | null = null;
+  private ghostLine: Path | null = null;
   private pointMarkers: Circle[] = [];
   private isDragging: boolean = false;
   private dragStartPoint: Point | null = null;
@@ -87,6 +88,9 @@ export class TSplineTool extends BaseTool {
     if (this.isDragging && this.dragStartPoint) {
       this.updateLastControlPoint(displayPoint);
       this.updatePreviewPath();
+    } else if (this.drawing && this.controlPoints.length > 0) {
+      // Show ghost line from last point to cursor when not dragging
+      this.updateGhostLine(displayPoint);
     }
   }
 
@@ -214,6 +218,11 @@ export class TSplineTool extends BaseTool {
     this.controlPoints.push(finalPoint);
     this.addPointMarker(finalPoint);
     this.clearSnapIndicator();
+    // Clear ghost line when adding a new point
+    if (this.ghostLine && this.canvas) {
+      this.canvas.remove(this.ghostLine);
+      this.ghostLine = null;
+    }
     this.updatePreviewPath();
   }
 
@@ -288,6 +297,32 @@ export class TSplineTool extends BaseTool {
     (this.previewPath as any).isHelper = true;
 
     this.canvas.add(this.previewPath);
+    this.canvas.requestRenderAll();
+  }
+
+  private updateGhostLine(toPoint: Point): void {
+    if (!this.canvas || this.controlPoints.length === 0) return;
+
+    if (this.ghostLine) {
+      this.canvas.remove(this.ghostLine);
+    }
+
+    // Generate a curve preview with the cursor position as the next point
+    const previewPoints = [...this.controlPoints, toPoint];
+    const pathData = this.generateCatmullRomPath(previewPoints);
+
+    this.ghostLine = new Path(pathData, {
+      stroke: this.config?.strokeColor ?? '#ffffff',
+      strokeWidth: this.config?.strokeWidth ?? 2,
+      strokeDashArray: [5, 5],
+      fill: 'transparent',
+      selectable: false,
+      evented: false,
+      opacity: 0.6
+    });
+    (this.ghostLine as any).isHelper = true;
+
+    this.canvas.add(this.ghostLine);
     this.canvas.requestRenderAll();
   }
 
@@ -407,6 +442,11 @@ export class TSplineTool extends BaseTool {
     if (this.previewPath) {
       this.canvas.remove(this.previewPath);
       this.previewPath = null;
+    }
+
+    if (this.ghostLine) {
+      this.canvas.remove(this.ghostLine);
+      this.ghostLine = null;
     }
 
     this.pointMarkers.forEach((marker) => this.canvas!.remove(marker));
