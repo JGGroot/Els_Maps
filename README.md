@@ -15,6 +15,7 @@ Live site: https://jggroot.github.io/Els_Maps/
 - Edit points and bezier handles to refine curves.
 - Lock the canvas to a base image so exports crop exactly to the map.
 - Export to PNG, JPG, or PDF, or copy the result straight to the clipboard.
+- Create a smart legend that auto-detects colors used on the map, with customizable labels, fonts, and styling.
 - Autosave every 30 seconds and restore sessions on reload.
 - Save, rename, and manage multiple projects locally with previews.
 - Light and dark themes plus configurable default stroke and font settings.
@@ -36,6 +37,7 @@ Live site: https://jggroot.github.io/Els_Maps/
 - T-Spline: click-drag control points for smooth, flowing lines.
 - Rectangle and Ellipse: quick shape outlines.
 - Text: add labels to the map.
+- Legend: generate a color key from your drawing, reorder and label entries, then stamp it on the canvas.
 
 ## Keyboard Shortcuts
 - Space + Drag: pan canvas.
