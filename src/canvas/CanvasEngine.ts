@@ -60,7 +60,10 @@ export class CanvasEngine {
       selectionLineWidth: CANVAS_DEFAULTS.selectionLineWidth,
       renderOnAddRemove: true,
       stopContextMenu: true,
-      fireRightClick: true
+      fireRightClick: true,
+      // Performance optimizations
+      enableRetinaScaling: false, // Disable 2x rendering for better performance
+      skipOffscreen: true // Skip rendering objects outside viewport
     });
 
     // Also prevent drag on Fabric's upper canvas (the interactive layer)
