@@ -2,17 +2,25 @@ import type { Canvas } from 'fabric';
 import type { ImportOptions, ProjectData } from '@/types';
 import { ImageImporter } from './ImageImporter';
 import { JSONImporter } from './JSONImporter';
-import { PDFImporter, type PDFImportOptions } from './PDFImporter';
+import type { PDFImporter, PDFImportOptions } from './PDFImporter';
 
 export class ImportManager {
   private imageImporter: ImageImporter;
   private jsonImporter: JSONImporter;
-  private pdfImporter: PDFImporter;
+  private pdfImporter: PDFImporter | null = null;
 
   constructor() {
     this.imageImporter = new ImageImporter();
     this.jsonImporter = new JSONImporter();
-    this.pdfImporter = new PDFImporter();
+    // PDFImporter is lazy-loaded to avoid loading the 2MB worker at startup
+  }
+
+  private async getPDFImporter(): Promise<PDFImporter> {
+    if (!this.pdfImporter) {
+      const { PDFImporter } = await import('./PDFImporter');
+      this.pdfImporter = new PDFImporter();
+    }
+    return this.pdfImporter;
   }
 
   async import(
@@ -46,11 +54,12 @@ export class ImportManager {
     options?: PDFImportOptions
   ): Promise<boolean> {
     try {
-      const pdfInfo = await this.pdfImporter.loadPDF(file);
+      const pdfImporter = await this.getPDFImporter();
+      const pdfInfo = await pdfImporter.loadPDF(file);
 
       if (pdfInfo.numPages === 1) {
         // Single page - import directly
-        return await this.pdfImporter.importPage(canvas, 1, options);
+        return await pdfImporter.importPage(canvas, 1, options);
       }
 
       // Multiple pages - show page selector
@@ -122,7 +131,8 @@ export class ImportManager {
 
       closeModal();
 
-      const success = await this.pdfImporter.importPage(canvas, pageNumber, {
+      const pdfImporter = await this.getPDFImporter();
+      const success = await pdfImporter.importPage(canvas, pageNumber, {
         ...options,
         scale
       });
