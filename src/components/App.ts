@@ -17,6 +17,7 @@ import { ExportFormat, type ExportOptions } from '@/types';
 import { ConfirmModal } from './controls/ConfirmModal';
 import { ToastManager } from './controls/ToastManager';
 import { UnsavedChangesModal, type UnsavedChoice } from './controls/UnsavedChangesModal';
+import { TextInputModal } from './controls/TextInputModal';
 
 export class App {
   private container: HTMLElement;
@@ -31,6 +32,7 @@ export class App {
   private confirmModal: ConfirmModal | null = null;
   private toastManager: ToastManager | null = null;
   private unsavedModal: UnsavedChangesModal | null = null;
+  private renameModal: TextInputModal | null = null;
 
   private importManager: ImportManager;
   private exportManager: ExportManager;
@@ -54,6 +56,7 @@ export class App {
     this.confirmModal = new ConfirmModal(this.layout.getElement());
     this.toastManager = new ToastManager(this.layout.getElement());
     this.unsavedModal = new UnsavedChangesModal(this.layout.getElement());
+    this.renameModal = new TextInputModal(this.layout.getElement());
 
     this.canvasContainer = new CanvasContainer(this.layout.getCanvasArea());
     this.engine = await this.canvasContainer.init();
@@ -455,6 +458,9 @@ export class App {
     }
     if (this.confirmModal) {
       this.propertiesPanel.setConfirmModal(this.confirmModal);
+    }
+    if (this.renameModal) {
+      this.propertiesPanel.setRenameModal(this.renameModal);
     }
 
     // Set up project callbacks

@@ -172,6 +172,26 @@ body {
   margin-bottom: 16px;
 }
 
+.app-modal-message {
+  margin-bottom: 10px;
+}
+
+.app-modal-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-foreground);
+  font-size: 14px;
+}
+
+.app-modal-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.25);
+}
+
 .app-modal-actions {
   display: flex;
   gap: 10px;

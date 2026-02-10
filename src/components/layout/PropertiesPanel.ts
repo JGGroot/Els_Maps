@@ -2,6 +2,7 @@ import type { FabricObject } from 'fabric';
 import { LAYOUT } from '@/constants';
 import type { ToastManager } from '@/components/controls/ToastManager';
 import type { ConfirmModal } from '@/components/controls/ConfirmModal';
+import type { TextInputModal } from '@/components/controls/TextInputModal';
 
 export interface PropertiesPanelCallbacks {
   onStrokeColorChange: (color: string) => void;
@@ -34,6 +35,7 @@ export class PropertiesPanel {
   private projectCallbacks: ProjectCallbacks | null = null;
   private toastManager: ToastManager | null = null;
   private confirmModal: ConfirmModal | null = null;
+  private renameModal: TextInputModal | null = null;
 
   constructor(parent: HTMLElement, callbacks: PropertiesPanelCallbacks) {
     this.callbacks = callbacks;
@@ -74,6 +76,10 @@ export class PropertiesPanel {
 
   setConfirmModal(confirmModal: ConfirmModal): void {
     this.confirmModal = confirmModal;
+  }
+
+  setRenameModal(renameModal: TextInputModal): void {
+    this.renameModal = renameModal;
   }
 
   private createProjectsSection(): HTMLElement {
@@ -327,7 +333,20 @@ export class PropertiesPanel {
   private async renameProject(project: { id: string; name: string }): Promise<void> {
     if (!this.projectCallbacks?.onRenameProject) return;
 
-    const nextName = prompt('Rename project:', project.name);
+    let nextName: string | null = null;
+    if (this.renameModal) {
+      nextName = await this.renameModal.open({
+        title: 'Rename project',
+        message: 'Update the project name.',
+        placeholder: 'Project name',
+        initialValue: project.name,
+        confirmLabel: 'Save',
+        cancelLabel: 'Cancel'
+      });
+    } else {
+      nextName = prompt('Rename project:', project.name);
+    }
+
     if (!nextName) return;
     const trimmed = nextName.trim();
     if (!trimmed || trimmed === project.name) return;
