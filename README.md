@@ -6,6 +6,8 @@
 
 El's Maps is a fast, browser-based drawing tool for tracing property lines on estate maps. I built it for my wife to draw boundaries rapidly and efficiently without the friction of heavyweight CAD tools.
 
+Live site: https://jggroot.github.io/Els_Maps/
+
 ## What It Does
 - Import a map image or PDF and draw property boundaries on top.
 - PDF import supports page selection and DPI scaling for clarity.
