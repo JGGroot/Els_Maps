@@ -341,3 +341,27 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Canvas performance and drag prevention */
+.canvas-container,
+.canvas-container canvas,
+.canvas-container * {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+  -webkit-touch-callout: none;
+}
+
+.canvas-container {
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.canvas-container canvas {
+  will-change: transform;
+  transform: translateZ(0);
+  image-rendering: -webkit-optimize-contrast;
+}
