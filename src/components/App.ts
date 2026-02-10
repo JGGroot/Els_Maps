@@ -1,11 +1,11 @@
-import { Point } from 'fabric';
+import { Point, type Group } from 'fabric';
 import { jsPDF } from 'jspdf';
 import { CanvasEngine, canvasLockManager } from '@/canvas';
 import { ToolManager, type ToolManagerCallbacks } from '@/tools';
 import { ToolType } from '@/types';
-import { historyManager, snapManager, settingsManager } from '@/utils';
+import { historyManager, snapManager, settingsManager, detectCanvasColors, createLegendGroup } from '@/utils';
 import { MainLayout } from './layout/MainLayout';
-import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, type EditActionCallbacks, type CanvasLockCallbacks, type SettingsCallbacks } from './layout/DesktopSidebar';
+import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, type EditActionCallbacks, type CanvasLockCallbacks, type SettingsCallbacks, type LegendCallbacks } from './layout/DesktopSidebar';
 import { SettingsModal } from './layout/SettingsModal';
 import { PropertiesPanel, type ProjectCallbacks } from './layout/PropertiesPanel';
 import { CanvasContainer } from './canvas/CanvasContainer';
@@ -18,6 +18,7 @@ import { ConfirmModal } from './controls/ConfirmModal';
 import { ToastManager } from './controls/ToastManager';
 import { UnsavedChangesModal, type UnsavedChoice } from './controls/UnsavedChangesModal';
 import { TextInputModal } from './controls/TextInputModal';
+import { LegendModal, type LegendConfig } from './controls/LegendModal';
 
 export class App {
   private container: HTMLElement;
@@ -33,6 +34,10 @@ export class App {
   private toastManager: ToastManager | null = null;
   private unsavedModal: UnsavedChangesModal | null = null;
   private renameModal: TextInputModal | null = null;
+  private legendModal: LegendModal | null = null;
+
+  private legendStampPreview: Group | null = null;
+  private legendStampConfig: LegendConfig | null = null;
 
   private importManager: ImportManager;
   private exportManager: ExportManager;
@@ -57,6 +62,7 @@ export class App {
     this.toastManager = new ToastManager(this.layout.getElement());
     this.unsavedModal = new UnsavedChangesModal(this.layout.getElement());
     this.renameModal = new TextInputModal(this.layout.getElement());
+    this.legendModal = new LegendModal(this.layout.getElement());
 
     this.canvasContainer = new CanvasContainer(this.layout.getCanvasArea());
     this.engine = await this.canvasContainer.init();
@@ -412,6 +418,12 @@ export class App {
       onSettingsOpen: () => this.settingsModal?.open()
     };
     this.desktopSidebar.setSettingsCallbacks(settingsCallbacks);
+
+    // Set up legend callbacks
+    const legendCallbacks: LegendCallbacks = {
+      onCreateLegend: () => this.handleCreateLegend()
+    };
+    this.desktopSidebar.setLegendCallbacks(legendCallbacks);
 
     // Initialize tool manager with default settings
     const defaultSettings = settingsManager.getSettings();
@@ -776,6 +788,132 @@ export class App {
 
   getCurrentProjectId(): string | null {
     return this.currentProjectId;
+  }
+
+  // Legend creation and stamp placement
+  private async handleCreateLegend(): Promise<void> {
+    const canvas = this.engine?.getCanvas();
+    if (!canvas || !this.legendModal) return;
+
+    // Detect colors used on canvas
+    const detectedColors = detectCanvasColors(canvas);
+
+    // Open the legend configuration modal
+    const result = await this.legendModal.open(detectedColors);
+
+    if (!result.confirmed || result.config.items.length === 0) {
+      return;
+    }
+
+    // Enter stamp placement mode
+    this.legendStampConfig = result.config;
+    this.enterLegendStampMode();
+  }
+
+  private enterLegendStampMode(): void {
+    if (!this.legendStampConfig) return;
+
+    const canvas = this.engine?.getCanvas();
+    const canvasEl = this.canvasContainer?.getElement();
+    if (!canvas || !canvasEl) return;
+
+    // Create the legend group preview
+    this.legendStampPreview = createLegendGroup(this.legendStampConfig);
+    this.legendStampPreview.set({
+      opacity: 0.7,
+      selectable: false,
+      evented: false
+    });
+    (this.legendStampPreview as any).isHelper = true;
+
+    canvas.add(this.legendStampPreview);
+
+    // Change cursor
+    canvasEl.style.cursor = 'crosshair';
+
+    // Add stamp placement listeners
+    canvasEl.addEventListener('mousemove', this.handleLegendStampMove);
+    canvasEl.addEventListener('mousedown', this.handleLegendStampPlace);
+    window.addEventListener('keydown', this.handleLegendStampCancel);
+
+    this.toastManager?.showToast({
+      title: 'Click to place legend',
+      subtitle: 'Press Escape to cancel'
+    });
+  }
+
+  private handleLegendStampMove = (e: MouseEvent): void => {
+    const canvas = this.engine?.getCanvas();
+    if (!canvas || !this.legendStampPreview) return;
+
+    const pointer = canvas.getPointer(e);
+    this.legendStampPreview.set({
+      left: pointer.x,
+      top: pointer.y
+    });
+    canvas.requestRenderAll();
+  };
+
+  private handleLegendStampPlace = (e: MouseEvent): void => {
+    if (e.button !== 0) return; // Left click only
+
+    const canvas = this.engine?.getCanvas();
+    if (!canvas || !this.legendStampConfig) return;
+
+    const pointer = canvas.getPointer(e);
+
+    // Remove the preview
+    if (this.legendStampPreview) {
+      canvas.remove(this.legendStampPreview);
+      this.legendStampPreview = null;
+    }
+
+    // Create the final legend group
+    const legend = createLegendGroup(this.legendStampConfig);
+    legend.set({
+      left: pointer.x,
+      top: pointer.y
+    });
+
+    canvas.add(legend);
+    canvas.setActiveObject(legend);
+    canvas.requestRenderAll();
+
+    // Exit stamp mode
+    this.exitLegendStampMode();
+
+    this.toastManager?.showToast({
+      title: 'Legend placed',
+      subtitle: 'You can move and resize it'
+    });
+  };
+
+  private handleLegendStampCancel = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      this.exitLegendStampMode();
+    }
+  };
+
+  private exitLegendStampMode(): void {
+    const canvas = this.engine?.getCanvas();
+    const canvasEl = this.canvasContainer?.getElement();
+
+    if (this.legendStampPreview && canvas) {
+      canvas.remove(this.legendStampPreview);
+      this.legendStampPreview = null;
+    }
+
+    this.legendStampConfig = null;
+
+    if (canvasEl) {
+      canvasEl.style.cursor = '';
+      canvasEl.removeEventListener('mousemove', this.handleLegendStampMove);
+      canvasEl.removeEventListener('mousedown', this.handleLegendStampPlace);
+    }
+    window.removeEventListener('keydown', this.handleLegendStampCancel);
+
+    canvas?.requestRenderAll();
   }
 
   private async handleUnsavedBeforeOpen(): Promise<boolean> {

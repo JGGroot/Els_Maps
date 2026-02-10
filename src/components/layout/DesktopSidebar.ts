@@ -39,6 +39,10 @@ export interface SettingsCallbacks {
   onSettingsOpen: () => void;
 }
 
+export interface LegendCallbacks {
+  onCreateLegend: () => void;
+}
+
 export class DesktopSidebar {
   private element: HTMLElement;
   private toolButtons: Map<ToolType, ToolButton> = new Map();
@@ -49,6 +53,7 @@ export class DesktopSidebar {
   private snapCallbacks: SnapCallbacks | null = null;
   private canvasLockCallbacks: CanvasLockCallbacks | null = null;
   private settingsCallbacks: SettingsCallbacks | null = null;
+  private legendCallbacks: LegendCallbacks | null = null;
   private snapEnabled: boolean = true;
   private undoBtn: HTMLButtonElement | null = null;
   private redoBtn: HTMLButtonElement | null = null;
@@ -167,6 +172,11 @@ export class DesktopSidebar {
     const clearBtn = this.createActionButton('Clear All', 'clear');
     clearBtn.addEventListener('click', () => this.editCallbacks?.onClearAll());
     buttonsContainer.appendChild(clearBtn);
+
+    // Create legend button
+    const legendBtn = this.createActionButton('Create Legend', 'legend');
+    legendBtn.addEventListener('click', () => this.legendCallbacks?.onCreateLegend());
+    buttonsContainer.appendChild(legendBtn);
 
     section.appendChild(buttonsContainer);
     return section;
@@ -376,6 +386,10 @@ export class DesktopSidebar {
 
   setSettingsCallbacks(callbacks: SettingsCallbacks): void {
     this.settingsCallbacks = callbacks;
+  }
+
+  setLegendCallbacks(callbacks: LegendCallbacks): void {
+    this.legendCallbacks = callbacks;
   }
 
   setSnapEnabled(enabled: boolean): void {

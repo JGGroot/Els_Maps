@@ -5,3 +5,5 @@ export * from './ThemeManager';
 export * from './SettingsManager';
 export * from './pathMerge';
 export * from './canvasPersistence';
+export * from './colorDetector';
+export * from './legendBuilder';

@@ -4,7 +4,7 @@ import { canvasLockManager } from '@/canvas';
 import type { LockedCanvasState } from '@/types';
 import { themeManager } from '@/utils/ThemeManager';
 
-export const CANVAS_OBJECT_PROPS = ['__elsImageId', '__elsLocked'] as const;
+export const CANVAS_OBJECT_PROPS = ['__elsImageId', '__elsLocked', '__elsLegend', '__elsLegendConfig'] as const;
 
 const GRID_SIZE = 40;
 
