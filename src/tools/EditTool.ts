@@ -1,4 +1,4 @@
-import { Circle, Line, Path, Polyline, Point } from 'fabric';
+import { Circle, Line, Path, Polyline, Polygon, Point } from 'fabric';
 import type { FabricObject, TMat2D, Canvas } from 'fabric';
 import { ToolType } from '@/types';
 import type { TouchPoint } from '@/types';
@@ -1270,141 +1270,226 @@ export class EditTool extends BaseTool {
   private deletePolylinePoint(editPoint: EditPoint): void {
     if (!(this.selectedObject instanceof Polyline) || !this.canvas) return;
 
-    const points = this.selectedObject.points;
+    const polyline = this.selectedObject;
+    const points = polyline.points;
     if (!points || points.length <= 2) return; // Need at least 2 points
 
-    // Get a stable anchor point position before deletion for compensation
-    const anchorIndex = editPoint.index === 0 ? 1 : 0;
-    const anchorBefore = this.getPointInParentPlane(this.selectedObject, points[anchorIndex]);
+    const deleteIndex = editPoint.index;
+    const isClosedShape = polyline instanceof Polygon;
 
-    points.splice(editPoint.index, 1);
-    this.selectedObject.set({ points: [...points] });
-    this.updateObjectDimensions(this.selectedObject);
+    // Get world coordinates of all points
+    const matrix = polyline.calcTransformMatrix();
+    const pathOffset = getPathOffset(polyline);
+    const worldPoints = points.map(pt => transformPoint(
+      pt.x - pathOffset.x,
+      pt.y - pathOffset.y,
+      matrix
+    ));
 
-    // Compensate for bounding box shift
-    const newAnchorIndex = editPoint.index === 0 ? 0 : anchorIndex;
-    if (points[newAnchorIndex]) {
-      const anchorAfter = this.getPointInParentPlane(this.selectedObject, points[newAnchorIndex]);
-      const diff = anchorAfter.subtract(anchorBefore);
-      this.selectedObject.left = (this.selectedObject.left ?? 0) - diff.x;
-      this.selectedObject.top = (this.selectedObject.top ?? 0) - diff.y;
+    // Get style from original
+    const stroke = polyline.stroke as string;
+    const strokeWidth = polyline.strokeWidth as number;
+
+    this.canvas.remove(polyline);
+
+    if (isClosedShape) {
+      // For closed shapes (Polygon), create a single open polyline
+      // Reorder points: start from after deleted point, go around to before deleted point
+      const reorderedPoints: Point[] = [];
+      for (let i = 1; i < points.length; i++) {
+        const idx = (deleteIndex + i) % points.length;
+        reorderedPoints.push(worldPoints[idx]);
+      }
+
+      if (reorderedPoints.length >= 2) {
+        const newPolyline = new Polyline(reorderedPoints, {
+          stroke,
+          strokeWidth,
+          fill: 'transparent',
+          selectable: true,
+          evented: true
+        });
+        this.canvas.add(newPolyline);
+        this.canvas.setActiveObject(newPolyline);
+      }
+    } else {
+      // For open polylines, split into separate segments
+      const isFirstPoint = deleteIndex === 0;
+      const isLastPoint = deleteIndex === points.length - 1;
+
+      if (isFirstPoint || isLastPoint) {
+        // Deleting an endpoint - just remove it and keep one polyline
+        const newWorldPoints = isFirstPoint
+          ? worldPoints.slice(1)
+          : worldPoints.slice(0, -1);
+
+        if (newWorldPoints.length >= 2) {
+          const newPolyline = new Polyline(newWorldPoints, {
+            stroke,
+            strokeWidth,
+            fill: 'transparent',
+            selectable: true,
+            evented: true
+          });
+          this.canvas.add(newPolyline);
+          this.canvas.setActiveObject(newPolyline);
+        }
+      } else {
+        // Deleting a middle point - split into two polylines
+        const beforePoints = worldPoints.slice(0, deleteIndex);
+        const afterPoints = worldPoints.slice(deleteIndex + 1);
+
+        // Create first polyline (points before deleted point)
+        if (beforePoints.length >= 2) {
+          const polyline1 = new Polyline(beforePoints, {
+            stroke,
+            strokeWidth,
+            fill: 'transparent',
+            selectable: true,
+            evented: true
+          });
+          this.canvas.add(polyline1);
+        }
+
+        // Create second polyline (points after deleted point)
+        if (afterPoints.length >= 2) {
+          const polyline2 = new Polyline(afterPoints, {
+            stroke,
+            strokeWidth,
+            fill: 'transparent',
+            selectable: true,
+            evented: true
+          });
+          this.canvas.add(polyline2);
+        }
+
+        // Clear selection since original object is gone
+        this.canvas.discardActiveObject();
+      }
     }
 
-    this.selectedObject.dirty = true;
-    this.selectedObject.setCoords();
-
-    this.finalizePointDeletion();
+    this.finalizePointDeletionWithClear();
   }
 
   private deletePathPoint(editPoint: EditPoint): void {
     if (!(this.selectedObject instanceof Path) || !this.canvas) return;
 
-    const pathData = this.selectedObject.path;
+    const path = this.selectedObject;
+    const pathData = path.path;
     if (!pathData || editPoint.segmentIndex === undefined) return;
 
-    // Count anchor points to ensure we keep at least 2
-    let anchorCount = 0;
-    for (const segment of pathData) {
-      const cmd = segment[0];
+    // Count anchor points and find their segment indices
+    const anchorSegments: number[] = [];
+    for (let i = 0; i < pathData.length; i++) {
+      const cmd = pathData[i][0];
       if (cmd === 'M' || cmd === 'L' || cmd === 'C' || cmd === 'Q') {
-        anchorCount++;
+        anchorSegments.push(i);
       }
     }
-    if (anchorCount <= 2) return;
-
-    // Find a stable anchor to use for position compensation (not the one being deleted)
-    const stableAnchorRef = this.getPathAnchorRef(this.selectedObject, editPoint);
-    const anchorBefore = stableAnchorRef ? this.getPathAnchorWorldPos(this.selectedObject, stableAnchorRef) : null;
+    if (anchorSegments.length <= 2) return;
 
     const segmentIndex = editPoint.segmentIndex;
-    const segment = pathData[segmentIndex];
-    const command = segment[0];
+    const anchorIndex = anchorSegments.indexOf(segmentIndex);
+    const isFirstAnchor = anchorIndex === 0;
+    const isLastAnchor = anchorIndex === anchorSegments.length - 1;
 
-    // Handle deletion based on segment type
-    if (command === 'M') {
-      // Deleting the start point: remove M and make next segment the new start
-      if (pathData.length > 1) {
-        const nextSeg = pathData[1];
-        const nextCmd = nextSeg[0];
-        // Convert next segment to M
-        if (nextCmd === 'L') {
-          pathData[1] = ['M', nextSeg[1], nextSeg[2]];
-        } else if (nextCmd === 'C') {
-          // For curve, use the endpoint as new M, lose the curve
-          pathData[1] = ['M', nextSeg[5], nextSeg[6]];
-        } else if (nextCmd === 'Q') {
-          pathData[1] = ['M', nextSeg[3], nextSeg[4]];
-        }
-        pathData.splice(0, 1);
+    // Get style from original
+    const stroke = path.stroke as string;
+    const strokeWidth = path.strokeWidth as number;
+
+    // Get world coordinates of all anchor points
+    const matrix = path.calcTransformMatrix();
+    const pathOffset = getPathOffset(path);
+    const worldAnchors: Point[] = [];
+
+    for (const segIdx of anchorSegments) {
+      const seg = pathData[segIdx];
+      const cmd = seg[0];
+      let x = 0, y = 0;
+      if (cmd === 'M' || cmd === 'L') {
+        x = seg[1] as number;
+        y = seg[2] as number;
+      } else if (cmd === 'C') {
+        x = seg[5] as number;
+        y = seg[6] as number;
+      } else if (cmd === 'Q') {
+        x = seg[3] as number;
+        y = seg[4] as number;
       }
-    } else if (command === 'L') {
-      // Simple line segment - just remove it
-      pathData.splice(segmentIndex, 1);
-    } else if (command === 'C') {
-      // Cubic bezier - just remove it
-      pathData.splice(segmentIndex, 1);
-    } else if (command === 'Q') {
-      // Quadratic bezier - just remove it
-      pathData.splice(segmentIndex, 1);
+      worldAnchors.push(transformPoint(x - pathOffset.x, y - pathOffset.y, matrix));
     }
 
-    // Update the path
-    this.selectedObject.set({ path: [...pathData] });
-    this.updateObjectDimensions(this.selectedObject);
+    if (isFirstAnchor || isLastAnchor) {
+      // Deleting an endpoint - just remove it and keep one path as polyline
+      const newWorldPoints = isFirstAnchor
+        ? worldAnchors.slice(1)
+        : worldAnchors.slice(0, -1);
 
-    // Compensate for bounding box shift using the stable anchor
-    if (anchorBefore && stableAnchorRef) {
-      // Recalculate the anchor ref since indices may have shifted
-      const newAnchorRef = this.findFirstAnchorRef(this.selectedObject);
-      if (newAnchorRef) {
-        const anchorAfter = this.getPathAnchorWorldPos(this.selectedObject, newAnchorRef);
-        const diff = anchorAfter.subtract(anchorBefore);
-        this.selectedObject.left = (this.selectedObject.left ?? 0) - diff.x;
-        this.selectedObject.top = (this.selectedObject.top ?? 0) - diff.y;
+      this.canvas.remove(path);
+
+      if (newWorldPoints.length >= 2) {
+        const newPolyline = new Polyline(newWorldPoints, {
+          stroke,
+          strokeWidth,
+          fill: 'transparent',
+          selectable: true,
+          evented: true
+        });
+        this.canvas.add(newPolyline);
+        this.canvas.setActiveObject(newPolyline);
       }
+    } else {
+      // Deleting a middle point - split into two polylines
+      const beforePoints = worldAnchors.slice(0, anchorIndex);
+      const afterPoints = worldAnchors.slice(anchorIndex + 1);
+
+      this.canvas.remove(path);
+
+      // Create first polyline (points before deleted point)
+      if (beforePoints.length >= 2) {
+        const polyline1 = new Polyline(beforePoints, {
+          stroke,
+          strokeWidth,
+          fill: 'transparent',
+          selectable: true,
+          evented: true
+        });
+        this.canvas.add(polyline1);
+      }
+
+      // Create second polyline (points after deleted point)
+      if (afterPoints.length >= 2) {
+        const polyline2 = new Polyline(afterPoints, {
+          stroke,
+          strokeWidth,
+          fill: 'transparent',
+          selectable: true,
+          evented: true
+        });
+        this.canvas.add(polyline2);
+      }
+
+      // Clear selection since original object is gone
+      this.canvas.discardActiveObject();
     }
 
-    this.selectedObject.dirty = true;
-    this.selectedObject.setCoords();
-
-    this.finalizePointDeletion();
+    this.finalizePointDeletionWithClear();
   }
 
-  private findFirstAnchorRef(path: Path): { segmentIndex: number; xIndex: number; yIndex: number } | null {
-    if (!path.path) return null;
+  private finalizePointDeletionWithClear(): void {
+    if (!this.canvas) return;
 
-    for (let i = 0; i < path.path.length; i++) {
-      const segment = path.path[i];
-      const command = segment[0];
+    // Clear edit state since object may have been removed/replaced
+    this.markerManager?.clear();
+    this.hitTester?.setEditPoints([]);
+    this.linkedAnchorGroups.clear();
 
-      if (command === 'M' || command === 'L') {
-        return { segmentIndex: i, xIndex: 1, yIndex: 2 };
-      }
-      if (command === 'C') {
-        return { segmentIndex: i, xIndex: 5, yIndex: 6 };
-      }
-      if (command === 'Q') {
-        return { segmentIndex: i, xIndex: 3, yIndex: 4 };
-      }
-    }
-
-    return null;
-  }
-
-  private finalizePointDeletion(): void {
-    if (!this.selectedObject || !this.canvas) return;
-
-    // Recreate markers
-    if (this.markerManager) {
-      const newPoints = this.markerManager.createMarkersForObject(this.selectedObject);
-      this.hitTester?.setEditPoints(newPoints);
-      this.buildLinkedAnchors();
-    }
-
+    this.selectedObject = null;
     this.activePoint = null;
     this.selectedPoint = null;
-    this.hasChanges = true;
-    this.editedSinceSelect = true;
+    this.hasChanges = false;
+    this.editedSinceSelect = false;
+
     historyManager.saveState();
     this.canvas.requestRenderAll();
   }
