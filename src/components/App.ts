@@ -9,9 +9,9 @@ import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, ty
 import { SettingsModal } from './layout/SettingsModal';
 import { PropertiesPanel, type ProjectCallbacks } from './layout/PropertiesPanel';
 import { CanvasContainer } from './canvas/CanvasContainer';
-import { ImportManager } from '@/import';
+import { ImportManager, ClipboardManager } from '@/import';
+import type { ImportColorOptions } from '@/import';
 import { ExportManager } from '@/export';
-import { ClipboardManager } from '@/import';
 import { StorageManager } from '@/storage';
 import { ExportFormat, type ExportOptions } from '@/types';
 import { ConfirmModal } from './controls/ConfirmModal';
@@ -19,6 +19,7 @@ import { ToastManager } from './controls/ToastManager';
 import { UnsavedChangesModal, type UnsavedChoice } from './controls/UnsavedChangesModal';
 import { TextInputModal } from './controls/TextInputModal';
 import { LegendModal, type LegendConfig } from './controls/LegendModal';
+import { ImportOptionsModal } from './controls/ImportOptionsModal';
 
 export class App {
   private container: HTMLElement;
@@ -35,6 +36,7 @@ export class App {
   private unsavedModal: UnsavedChangesModal | null = null;
   private renameModal: TextInputModal | null = null;
   private legendModal: LegendModal | null = null;
+  private importOptionsModal: ImportOptionsModal | null = null;
 
   private legendStampPreview: Group | null = null;
   private legendStampConfig: LegendConfig | null = null;
@@ -63,6 +65,20 @@ export class App {
     this.unsavedModal = new UnsavedChangesModal(this.layout.getElement());
     this.renameModal = new TextInputModal(this.layout.getElement());
     this.legendModal = new LegendModal(this.layout.getElement());
+    this.importOptionsModal = new ImportOptionsModal(this.layout.getElement());
+
+    // Set up import options callback for ImportManager and ClipboardManager
+    const importOptionsCallback = async (): Promise<ImportColorOptions | null> => {
+      const result = await this.importOptionsModal!.open();
+      if (result === null) return null;
+      return { grayscale: result.colorMode === 'grayscale' };
+    };
+    this.importManager.setImportOptionsCallback(importOptionsCallback);
+    this.clipboardManager.setImportOptionsCallback(async () => {
+      const result = await this.importOptionsModal!.open();
+      if (result === null) return null;
+      return { grayscale: result.colorMode === 'grayscale' };
+    });
 
     this.canvasContainer = new CanvasContainer(this.layout.getCanvasArea());
     this.engine = await this.canvasContainer.init();

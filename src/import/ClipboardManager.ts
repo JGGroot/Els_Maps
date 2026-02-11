@@ -1,12 +1,24 @@
 import { FabricImage, type Canvas } from 'fabric';
 import { canvasLockManager } from '@/canvas';
+import { convertToGrayscale } from './grayscaleUtils';
+
+export interface ClipboardImportOptions {
+  grayscale?: boolean;
+}
+
+export type ImportOptionsCallback = () => Promise<ClipboardImportOptions | null>;
 
 export class ClipboardManager {
   private canvas: Canvas | null = null;
+  private getImportOptions: ImportOptionsCallback | null = null;
 
   setCanvas(canvas: Canvas): void {
     this.canvas = canvas;
     canvasLockManager.setCanvas(canvas);
+  }
+
+  setImportOptionsCallback(callback: ImportOptionsCallback): void {
+    this.getImportOptions = callback;
   }
 
   async pasteFromClipboard(): Promise<boolean> {
@@ -20,7 +32,19 @@ export class ClipboardManager {
         const imageType = item.types.find(type => type.startsWith('image/'));
         if (imageType) {
           const blob = await item.getType(imageType);
-          return await this.addImageToCanvas(blob);
+
+          // Get import options from callback (shows modal)
+          let options: ClipboardImportOptions = {};
+          if (this.getImportOptions) {
+            const result = await this.getImportOptions();
+            if (result === null) {
+              // User cancelled
+              return false;
+            }
+            options = result;
+          }
+
+          return await this.addImageToCanvas(blob, options);
         }
       }
 
@@ -58,11 +82,17 @@ export class ClipboardManager {
     }
   }
 
-  private async addImageToCanvas(blob: Blob): Promise<boolean> {
+  private async addImageToCanvas(blob: Blob, options: ClipboardImportOptions = {}): Promise<boolean> {
     if (!this.canvas) return false;
 
     try {
-      const dataUrl = await this.blobToDataUrl(blob);
+      let dataUrl = await this.blobToDataUrl(blob);
+
+      // Convert to grayscale if requested
+      if (options.grayscale) {
+        dataUrl = await convertToGrayscale(dataUrl);
+      }
+
       const img = await FabricImage.fromURL(dataUrl);
       canvasLockManager.ensureImageId(img);
 
@@ -112,7 +142,17 @@ export class ClipboardManager {
           e.preventDefault();
           const blob = item.getAsFile();
           if (blob) {
-            await this.addImageToCanvas(blob);
+            // Get import options from callback (shows modal)
+            let options: ClipboardImportOptions = {};
+            if (this.getImportOptions) {
+              const result = await this.getImportOptions();
+              if (result === null) {
+                // User cancelled
+                return;
+              }
+              options = result;
+            }
+            await this.addImageToCanvas(blob, options);
           }
           return;
         }

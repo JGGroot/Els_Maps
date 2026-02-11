@@ -1,6 +1,7 @@
 import { FabricImage, type Canvas } from 'fabric';
 import * as pdfjsLib from 'pdfjs-dist';
 import { canvasLockManager } from '@/canvas';
+import { convertCanvasToGrayscale } from './grayscaleUtils';
 
 // Set up the worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -11,6 +12,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 export interface PDFImportOptions {
   pageNumber?: number;
   scale?: number; // DPI scale factor (1 = 72 DPI, 2 = 144 DPI, etc.)
+  grayscale?: boolean;
 }
 
 export interface PDFPageInfo {
@@ -76,6 +78,11 @@ export class PDFImporter {
         viewport,
         canvas: renderCanvas
       } as any).promise;
+
+      // Convert to grayscale if requested
+      if (options.grayscale) {
+        convertCanvasToGrayscale(context, renderCanvas.width, renderCanvas.height);
+      }
 
       // Convert to data URL and create Fabric image
       const dataUrl = renderCanvas.toDataURL('image/png', 1.0);

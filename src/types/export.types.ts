@@ -23,6 +23,7 @@ export interface ImportOptions {
   maxWidth?: number;
   maxHeight?: number;
   preserveAspectRatio?: boolean;
+  grayscale?: boolean;
 }
 
 export interface ProjectData {

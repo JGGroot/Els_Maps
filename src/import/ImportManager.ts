@@ -4,15 +4,26 @@ import { ImageImporter } from './ImageImporter';
 import { JSONImporter } from './JSONImporter';
 import type { PDFImporter, PDFImportOptions } from './PDFImporter';
 
+export interface ImportColorOptions {
+  grayscale: boolean;
+}
+
+export type ImportOptionsCallback = () => Promise<ImportColorOptions | null>;
+
 export class ImportManager {
   private imageImporter: ImageImporter;
   private jsonImporter: JSONImporter;
   private pdfImporter: PDFImporter | null = null;
+  private getImportOptions: ImportOptionsCallback | null = null;
 
   constructor() {
     this.imageImporter = new ImageImporter();
     this.jsonImporter = new JSONImporter();
     // PDFImporter is lazy-loaded to avoid loading the 2MB worker at startup
+  }
+
+  setImportOptionsCallback(callback: ImportOptionsCallback): void {
+    this.getImportOptions = callback;
   }
 
   private async getPDFImporter(): Promise<PDFImporter> {
@@ -31,17 +42,39 @@ export class ImportManager {
     const fileType = this.getFileType(file);
 
     switch (fileType) {
-      case 'image':
-        const imageSuccess = await this.imageImporter.import(canvas, file, options);
+      case 'image': {
+        // Get import options (color/B&W) from callback
+        let importOpts = { ...options };
+        if (this.getImportOptions) {
+          const result = await this.getImportOptions();
+          if (result === null) {
+            // User cancelled
+            return { success: false };
+          }
+          importOpts = { ...importOpts, grayscale: result.grayscale };
+        }
+        const imageSuccess = await this.imageImporter.import(canvas, file, importOpts);
         return { success: imageSuccess };
+      }
 
       case 'json':
         const projectData = await this.jsonImporter.import(canvas, file);
         return { success: projectData !== null, projectData: projectData ?? undefined };
 
-      case 'pdf':
-        const pdfSuccess = await this.importPDF(canvas, file);
+      case 'pdf': {
+        // Get import options (color/B&W) from callback
+        let grayscale = false;
+        if (this.getImportOptions) {
+          const result = await this.getImportOptions();
+          if (result === null) {
+            // User cancelled
+            return { success: false };
+          }
+          grayscale = result.grayscale;
+        }
+        const pdfSuccess = await this.importPDF(canvas, file, { grayscale });
         return { success: pdfSuccess };
+      }
 
       default:
         return { success: false };
@@ -58,11 +91,11 @@ export class ImportManager {
       const pdfInfo = await pdfImporter.loadPDF(file);
 
       if (pdfInfo.numPages === 1) {
-        // Single page - import directly
+        // Single page - import directly with options (including grayscale)
         return await pdfImporter.importPage(canvas, 1, options);
       }
 
-      // Multiple pages - show page selector
+      // Multiple pages - show page selector (grayscale already set)
       return new Promise((resolve) => {
         this.showPDFPageSelector(canvas, pdfInfo, options, resolve);
       });
@@ -134,7 +167,8 @@ export class ImportManager {
       const pdfImporter = await this.getPDFImporter();
       const success = await pdfImporter.importPage(canvas, pageNumber, {
         ...options,
-        scale
+        scale,
+        grayscale: options?.grayscale
       });
       resolve(success);
     });

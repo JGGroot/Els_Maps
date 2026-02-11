@@ -1,6 +1,7 @@
 import { FabricImage, type Canvas } from 'fabric';
 import type { ImportOptions } from '@/types';
 import { canvasLockManager } from '@/canvas';
+import { convertToGrayscale } from './grayscaleUtils';
 
 export class ImageImporter {
   async import(
@@ -9,7 +10,13 @@ export class ImageImporter {
     options?: ImportOptions
   ): Promise<boolean> {
     try {
-      const dataUrl = await this.fileToDataUrl(file);
+      let dataUrl = await this.fileToDataUrl(file);
+
+      // Convert to grayscale if requested
+      if (options?.grayscale) {
+        dataUrl = await convertToGrayscale(dataUrl);
+      }
+
       const img = await FabricImage.fromURL(dataUrl);
       canvasLockManager.ensureImageId(img);
 
