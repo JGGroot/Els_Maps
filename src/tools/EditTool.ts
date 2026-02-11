@@ -614,6 +614,7 @@ export class EditTool extends BaseTool {
   // State
   private selectedObject: EditableObject | null = null;
   private activePoint: EditPoint | null = null;
+  private selectedPoint: EditPoint | null = null;  // Point selected for deletion (click without drag)
   private hoveredPoint: EditPoint | null = null;
   private isDragging: boolean = false;
   private hasChanges: boolean = false;
@@ -727,7 +728,13 @@ export class EditTool extends BaseTool {
 
     if (!clickedPoint) return;
 
+    // Clear previous selection visual
+    if (this.selectedPoint && this.selectedPoint !== clickedPoint) {
+      this.markerManager?.setMarkerState(this.selectedPoint, 'normal');
+    }
+
     this.activePoint = clickedPoint;
+    this.selectedPoint = clickedPoint;  // Keep selected for deletion after release
     this.isDragging = true;
     this.suppressSelectionClear = true;
 
@@ -821,7 +828,13 @@ export class EditTool extends BaseTool {
     const clickedPoint = this.hitTester?.findPointAt(point, preferType);
 
     if (clickedPoint) {
+      // Clear previous selection visual
+      if (this.selectedPoint && this.selectedPoint !== clickedPoint) {
+        this.markerManager?.setMarkerState(this.selectedPoint, 'normal');
+      }
+
       this.activePoint = clickedPoint;
+      this.selectedPoint = clickedPoint;  // Select point for potential deletion
       this.isDragging = true;
       this.suppressSelectionClear = true;
 
@@ -831,6 +844,12 @@ export class EditTool extends BaseTool {
       event.stopPropagation();
       event.stopImmediatePropagation?.();
       return;
+    }
+
+    // Clicking elsewhere deselects the point
+    if (this.selectedPoint) {
+      this.markerManager?.setMarkerState(this.selectedPoint, 'normal');
+      this.selectedPoint = null;
     }
 
     // Let Fabric handle selection when not clicking a node
@@ -866,8 +885,14 @@ export class EditTool extends BaseTool {
 
   onMouseUp(_point: Point, _event: MouseEvent): void {
     if (this.isDragging) {
+      // Keep selectedPoint visually active if we have one
       if (this.activePoint) {
-        this.markerManager?.setMarkerState(this.activePoint, 'normal');
+        if (this.activePoint === this.selectedPoint) {
+          // Keep it highlighted as selected
+          this.markerManager?.setMarkerState(this.activePoint, 'active');
+        } else {
+          this.markerManager?.setMarkerState(this.activePoint, 'normal');
+        }
       }
 
       this.isDragging = false;
@@ -890,9 +915,19 @@ export class EditTool extends BaseTool {
     const clickedPoint = this.hitTester?.findPointAt(fabricPoint, PointType.ANCHOR);
 
     if (clickedPoint) {
+      // Clear previous selection visual
+      if (this.selectedPoint && this.selectedPoint !== clickedPoint) {
+        this.markerManager?.setMarkerState(this.selectedPoint, 'normal');
+      }
+
       this.activePoint = clickedPoint;
+      this.selectedPoint = clickedPoint;
       this.isDragging = true;
       this.markerManager?.setMarkerState(clickedPoint, 'active');
+    } else if (this.selectedPoint) {
+      // Touching elsewhere deselects
+      this.markerManager?.setMarkerState(this.selectedPoint, 'normal');
+      this.selectedPoint = null;
     }
   }
 
@@ -906,7 +941,12 @@ export class EditTool extends BaseTool {
 
   onTouchEnd(_point: TouchPoint): void {
     if (this.activePoint) {
-      this.markerManager?.setMarkerState(this.activePoint, 'normal');
+      if (this.activePoint === this.selectedPoint) {
+        // Keep it highlighted as selected
+        this.markerManager?.setMarkerState(this.activePoint, 'active');
+      } else {
+        this.markerManager?.setMarkerState(this.activePoint, 'normal');
+      }
     }
 
     this.isDragging = false;
@@ -924,20 +964,30 @@ export class EditTool extends BaseTool {
 
   onKeyDown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
+      // Clear selected point first
+      if (this.selectedPoint) {
+        this.markerManager?.setMarkerState(this.selectedPoint, 'normal');
+        this.selectedPoint = null;
+        this.canvas?.requestRenderAll();
+        return;
+      }
       this.clearEditPoints();
       this.canvas?.discardActiveObject();
       this.canvas?.requestRenderAll();
       return;
     }
 
-    // Delete selected point
-    if ((event.key === 'Delete' || event.key === 'Backspace') && this.activePoint) {
-      this.deletePoint(this.activePoint);
+    // Delete selected point (use selectedPoint which persists after click)
+    const pointToDelete = this.selectedPoint ?? this.activePoint;
+    if ((event.key === 'Delete' || event.key === 'Backspace') && pointToDelete) {
+      event.preventDefault();
+      this.deletePoint(pointToDelete);
       return;
     }
 
-    // Nudge with arrow keys
-    if (this.activePoint && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+    // Nudge with arrow keys (use selectedPoint or activePoint)
+    const pointToNudge = this.selectedPoint ?? this.activePoint;
+    if (pointToNudge && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
       event.preventDefault();
       const amount = event.shiftKey ? NUDGE_AMOUNT_SHIFT : NUDGE_AMOUNT;
       let dx = 0;
@@ -951,11 +1001,11 @@ export class EditTool extends BaseTool {
       }
 
       const currentPos = new Point(
-        this.activePoint.marker.left ?? 0,
-        this.activePoint.marker.top ?? 0
+        pointToNudge.marker.left ?? 0,
+        pointToNudge.marker.top ?? 0
       );
       const newPos = new Point(currentPos.x + dx, currentPos.y + dy);
-      this.movePoint(this.activePoint, newPos);
+      this.movePoint(pointToNudge, newPos);
 
       if (!this.hasChanges) {
         this.hasChanges = true;
@@ -1114,16 +1164,30 @@ export class EditTool extends BaseTool {
     const command = segment[0];
 
     if (editPoint.type === PointType.ANCHOR) {
+      // Calculate delta to move connected control points
+      let oldX = 0, oldY = 0;
       if (command === 'M' || command === 'L') {
+        oldX = segment[1] as number;
+        oldY = segment[2] as number;
         segment[1] = pos.x;
         segment[2] = pos.y;
       } else if (command === 'C') {
+        oldX = segment[5] as number;
+        oldY = segment[6] as number;
         segment[5] = pos.x;
         segment[6] = pos.y;
       } else if (command === 'Q') {
+        oldX = segment[3] as number;
+        oldY = segment[4] as number;
         segment[3] = pos.x;
         segment[4] = pos.y;
       }
+
+      const dx = pos.x - oldX;
+      const dy = pos.y - oldY;
+
+      // Move connected control points by the same delta
+      this.moveConnectedControlPoints(path, editPoint.segmentIndex, dx, dy);
     } else if (editPoint.type === PointType.CONTROL) {
       const cpIndex = editPoint.controlPointIndex ?? 0;
 
@@ -1158,32 +1222,191 @@ export class EditTool extends BaseTool {
     this.syncMarkersWithObject();
   }
 
+  private moveConnectedControlPoints(path: Path, segmentIndex: number, dx: number, dy: number): void {
+    if (!path.path) return;
+
+    const segment = path.path[segmentIndex];
+    const command = segment[0];
+
+    // For C command: move cp2 (control point connected to this anchor)
+    if (command === 'C') {
+      segment[3] = (segment[3] as number) + dx;
+      segment[4] = (segment[4] as number) + dy;
+    }
+
+    // For Q command: move the control point
+    if (command === 'Q') {
+      segment[1] = (segment[1] as number) + dx;
+      segment[2] = (segment[2] as number) + dy;
+    }
+
+    // Check next segment - if it's a C, move its cp1 (connected to this anchor)
+    const nextSegment = path.path[segmentIndex + 1];
+    if (nextSegment) {
+      const nextCmd = nextSegment[0];
+      if (nextCmd === 'C') {
+        nextSegment[1] = (nextSegment[1] as number) + dx;
+        nextSegment[2] = (nextSegment[2] as number) + dy;
+      } else if (nextCmd === 'Q') {
+        nextSegment[1] = (nextSegment[1] as number) + dx;
+        nextSegment[2] = (nextSegment[2] as number) + dy;
+      }
+    }
+  }
+
   private deletePoint(editPoint: EditPoint): void {
     if (!this.selectedObject || !this.canvas) return;
 
-    // Only allow deleting anchor points from polylines
-    if (this.selectedObject instanceof Polyline && editPoint.type === PointType.ANCHOR) {
-      const points = this.selectedObject.points;
-      if (!points || points.length <= 2) return; // Need at least 2 points
+    // Only allow deleting anchor points
+    if (editPoint.type !== PointType.ANCHOR) return;
 
-      points.splice(editPoint.index, 1);
-      this.selectedObject.set({ points: [...points] });
-      this.updateObjectDimensions(this.selectedObject);
-      this.selectedObject.dirty = true;
-      this.selectedObject.setCoords();
-
-      // Recreate markers
-      if (this.markerManager) {
-        const newPoints = this.markerManager.createMarkersForObject(this.selectedObject);
-        this.hitTester?.setEditPoints(newPoints);
-        this.buildLinkedAnchors();
-      }
-
-      this.activePoint = null;
-      this.hasChanges = true;
-      this.editedSinceSelect = true;
-      this.canvas.requestRenderAll();
+    if (this.selectedObject instanceof Polyline) {
+      this.deletePolylinePoint(editPoint);
+    } else if (this.selectedObject instanceof Path) {
+      this.deletePathPoint(editPoint);
     }
+  }
+
+  private deletePolylinePoint(editPoint: EditPoint): void {
+    if (!(this.selectedObject instanceof Polyline) || !this.canvas) return;
+
+    const points = this.selectedObject.points;
+    if (!points || points.length <= 2) return; // Need at least 2 points
+
+    // Get a stable anchor point position before deletion for compensation
+    const anchorIndex = editPoint.index === 0 ? 1 : 0;
+    const anchorBefore = this.getPointInParentPlane(this.selectedObject, points[anchorIndex]);
+
+    points.splice(editPoint.index, 1);
+    this.selectedObject.set({ points: [...points] });
+    this.updateObjectDimensions(this.selectedObject);
+
+    // Compensate for bounding box shift
+    const newAnchorIndex = editPoint.index === 0 ? 0 : anchorIndex;
+    if (points[newAnchorIndex]) {
+      const anchorAfter = this.getPointInParentPlane(this.selectedObject, points[newAnchorIndex]);
+      const diff = anchorAfter.subtract(anchorBefore);
+      this.selectedObject.left = (this.selectedObject.left ?? 0) - diff.x;
+      this.selectedObject.top = (this.selectedObject.top ?? 0) - diff.y;
+    }
+
+    this.selectedObject.dirty = true;
+    this.selectedObject.setCoords();
+
+    this.finalizePointDeletion();
+  }
+
+  private deletePathPoint(editPoint: EditPoint): void {
+    if (!(this.selectedObject instanceof Path) || !this.canvas) return;
+
+    const pathData = this.selectedObject.path;
+    if (!pathData || editPoint.segmentIndex === undefined) return;
+
+    // Count anchor points to ensure we keep at least 2
+    let anchorCount = 0;
+    for (const segment of pathData) {
+      const cmd = segment[0];
+      if (cmd === 'M' || cmd === 'L' || cmd === 'C' || cmd === 'Q') {
+        anchorCount++;
+      }
+    }
+    if (anchorCount <= 2) return;
+
+    // Find a stable anchor to use for position compensation (not the one being deleted)
+    const stableAnchorRef = this.getPathAnchorRef(this.selectedObject, editPoint);
+    const anchorBefore = stableAnchorRef ? this.getPathAnchorWorldPos(this.selectedObject, stableAnchorRef) : null;
+
+    const segmentIndex = editPoint.segmentIndex;
+    const segment = pathData[segmentIndex];
+    const command = segment[0];
+
+    // Handle deletion based on segment type
+    if (command === 'M') {
+      // Deleting the start point: remove M and make next segment the new start
+      if (pathData.length > 1) {
+        const nextSeg = pathData[1];
+        const nextCmd = nextSeg[0];
+        // Convert next segment to M
+        if (nextCmd === 'L') {
+          pathData[1] = ['M', nextSeg[1], nextSeg[2]];
+        } else if (nextCmd === 'C') {
+          // For curve, use the endpoint as new M, lose the curve
+          pathData[1] = ['M', nextSeg[5], nextSeg[6]];
+        } else if (nextCmd === 'Q') {
+          pathData[1] = ['M', nextSeg[3], nextSeg[4]];
+        }
+        pathData.splice(0, 1);
+      }
+    } else if (command === 'L') {
+      // Simple line segment - just remove it
+      pathData.splice(segmentIndex, 1);
+    } else if (command === 'C') {
+      // Cubic bezier - just remove it
+      pathData.splice(segmentIndex, 1);
+    } else if (command === 'Q') {
+      // Quadratic bezier - just remove it
+      pathData.splice(segmentIndex, 1);
+    }
+
+    // Update the path
+    this.selectedObject.set({ path: [...pathData] });
+    this.updateObjectDimensions(this.selectedObject);
+
+    // Compensate for bounding box shift using the stable anchor
+    if (anchorBefore && stableAnchorRef) {
+      // Recalculate the anchor ref since indices may have shifted
+      const newAnchorRef = this.findFirstAnchorRef(this.selectedObject);
+      if (newAnchorRef) {
+        const anchorAfter = this.getPathAnchorWorldPos(this.selectedObject, newAnchorRef);
+        const diff = anchorAfter.subtract(anchorBefore);
+        this.selectedObject.left = (this.selectedObject.left ?? 0) - diff.x;
+        this.selectedObject.top = (this.selectedObject.top ?? 0) - diff.y;
+      }
+    }
+
+    this.selectedObject.dirty = true;
+    this.selectedObject.setCoords();
+
+    this.finalizePointDeletion();
+  }
+
+  private findFirstAnchorRef(path: Path): { segmentIndex: number; xIndex: number; yIndex: number } | null {
+    if (!path.path) return null;
+
+    for (let i = 0; i < path.path.length; i++) {
+      const segment = path.path[i];
+      const command = segment[0];
+
+      if (command === 'M' || command === 'L') {
+        return { segmentIndex: i, xIndex: 1, yIndex: 2 };
+      }
+      if (command === 'C') {
+        return { segmentIndex: i, xIndex: 5, yIndex: 6 };
+      }
+      if (command === 'Q') {
+        return { segmentIndex: i, xIndex: 3, yIndex: 4 };
+      }
+    }
+
+    return null;
+  }
+
+  private finalizePointDeletion(): void {
+    if (!this.selectedObject || !this.canvas) return;
+
+    // Recreate markers
+    if (this.markerManager) {
+      const newPoints = this.markerManager.createMarkersForObject(this.selectedObject);
+      this.hitTester?.setEditPoints(newPoints);
+      this.buildLinkedAnchors();
+    }
+
+    this.activePoint = null;
+    this.selectedPoint = null;
+    this.hasChanges = true;
+    this.editedSinceSelect = true;
+    historyManager.saveState();
+    this.canvas.requestRenderAll();
   }
 
   // -------------------------------------------------------------------------
@@ -1549,6 +1772,7 @@ export class EditTool extends BaseTool {
     this.priorObjectState = null;
     this.editedSinceSelect = false;
     this.activePoint = null;
+    this.selectedPoint = null;
     this.hoveredPoint = null;
   }
 
@@ -1559,6 +1783,7 @@ export class EditTool extends BaseTool {
   cancel(): void {
     this.clearEditPoints();
     this.selectedObject = null;
+    this.selectedPoint = null;
     super.cancel();
   }
 

@@ -78,18 +78,18 @@ export class HistoryManager {
     this.currentIndex = this.history.length - 1;
   }
 
-  undo(): boolean {
+  async undo(): Promise<boolean> {
     if (!this.canvas || this.currentIndex <= 0) return false;
 
     this.currentIndex -= 1;
     const state = this.history[this.currentIndex];
     if (!state) return false;
 
-    this.restoreState(state);
+    await this.restoreState(state);
     return true;
   }
 
-  redo(): boolean {
+  async redo(): Promise<boolean> {
     if (!this.canvas) return false;
 
     // Can only redo if we're behind the latest state
@@ -99,7 +99,7 @@ export class HistoryManager {
     const state = this.history[this.currentIndex];
     if (!state) return false;
 
-    this.restoreState(state);
+    await this.restoreState(state);
     return true;
   }
 
@@ -117,24 +117,21 @@ export class HistoryManager {
     this.isDirty = false;
   }
 
-  private restoreState(state: HistoryState): void {
+  private async restoreState(state: HistoryState): Promise<void> {
     if (!this.canvas) return;
 
     this.isRestoring = true;
-    this.canvas
-      .loadFromJSON(state.json)
-      .then(() => {
-        if (this.canvas) {
-          applyPostLoadVisualState(this.canvas);
-          restoreCanvasLockState(this.canvas, state.lockState ?? null);
-        }
-      })
-      .catch((error) => {
-        console.error('Failed to restore canvas state:', error);
-      })
-      .finally(() => {
-        this.isRestoring = false;
-      });
+    try {
+      await this.canvas.loadFromJSON(state.json);
+      if (this.canvas) {
+        applyPostLoadVisualState(this.canvas);
+        restoreCanvasLockState(this.canvas, state.lockState ?? null);
+      }
+    } catch (error) {
+      console.error('Failed to restore canvas state:', error);
+    } finally {
+      this.isRestoring = false;
+    }
   }
 
   markDirty(): void {

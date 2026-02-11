@@ -273,13 +273,23 @@ export class App {
       // Handle Ctrl/Cmd+Z for undo
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
-        historyManager.undo();
+        historyManager.undo().then(() => {
+          this.desktopSidebar?.updateUndoRedoButtons(
+            historyManager.canUndo(),
+            historyManager.canRedo()
+          );
+        });
         return;
       }
       // Handle Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y for redo
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'y') && e.shiftKey) {
+      if ((e.ctrlKey || e.metaKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
         e.preventDefault();
-        historyManager.redo();
+        historyManager.redo().then(() => {
+          this.desktopSidebar?.updateUndoRedoButtons(
+            historyManager.canUndo(),
+            historyManager.canRedo()
+          );
+        });
         return;
       }
       // Handle Ctrl/Cmd+V for paste
@@ -359,9 +369,9 @@ export class App {
 
     // Set up edit action callbacks
     const editCallbacks: EditActionCallbacks = {
-      onUndo: () => {
+      onUndo: async () => {
         const canvas = this.engine?.getCanvas();
-        if (canvas && historyManager.undo()) {
+        if (canvas && await historyManager.undo()) {
           canvas.renderAll();
           this.desktopSidebar?.updateUndoRedoButtons(
             historyManager.canUndo(),
@@ -369,9 +379,9 @@ export class App {
           );
         }
       },
-      onRedo: () => {
+      onRedo: async () => {
         const canvas = this.engine?.getCanvas();
-        if (canvas && historyManager.redo()) {
+        if (canvas && await historyManager.redo()) {
           canvas.renderAll();
           this.desktopSidebar?.updateUndoRedoButtons(
             historyManager.canUndo(),
