@@ -43,6 +43,10 @@ export interface LegendCallbacks {
   onCreateLegend: () => void;
 }
 
+export interface NorthPointerCallbacks {
+  onAddNorthPointer: () => void;
+}
+
 export class DesktopSidebar {
   private element: HTMLElement;
   private toolButtons: Map<ToolType, ToolButton> = new Map();
@@ -54,6 +58,7 @@ export class DesktopSidebar {
   private canvasLockCallbacks: CanvasLockCallbacks | null = null;
   private settingsCallbacks: SettingsCallbacks | null = null;
   private legendCallbacks: LegendCallbacks | null = null;
+  private northPointerCallbacks: NorthPointerCallbacks | null = null;
   private snapEnabled: boolean = true;
   private undoBtn: HTMLButtonElement | null = null;
   private redoBtn: HTMLButtonElement | null = null;
@@ -177,6 +182,11 @@ export class DesktopSidebar {
     const legendBtn = this.createActionButton('Create Legend', 'legend');
     legendBtn.addEventListener('click', () => this.legendCallbacks?.onCreateLegend());
     buttonsContainer.appendChild(legendBtn);
+
+    // Add north pointer button
+    const northPointerBtn = this.createActionButton('Add North Pointer', 'compass');
+    northPointerBtn.addEventListener('click', () => this.northPointerCallbacks?.onAddNorthPointer());
+    buttonsContainer.appendChild(northPointerBtn);
 
     section.appendChild(buttonsContainer);
     return section;
@@ -390,6 +400,10 @@ export class DesktopSidebar {
 
   setLegendCallbacks(callbacks: LegendCallbacks): void {
     this.legendCallbacks = callbacks;
+  }
+
+  setNorthPointerCallbacks(callbacks: NorthPointerCallbacks): void {
+    this.northPointerCallbacks = callbacks;
   }
 
   setSnapEnabled(enabled: boolean): void {

@@ -1,11 +1,12 @@
-import { Point, type Group } from 'fabric';
+import { Point, FabricImage, type Group } from 'fabric';
+import northPointerImg from '@/assets/icons/north_pointer.png';
 import { jsPDF } from 'jspdf';
 import { CanvasEngine, canvasLockManager } from '@/canvas';
 import { ToolManager, type ToolManagerCallbacks } from '@/tools';
 import { ToolType } from '@/types';
 import { historyManager, snapManager, settingsManager, detectCanvasColors, createLegendGroup } from '@/utils';
 import { MainLayout } from './layout/MainLayout';
-import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, type EditActionCallbacks, type CanvasLockCallbacks, type SettingsCallbacks, type LegendCallbacks } from './layout/DesktopSidebar';
+import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, type EditActionCallbacks, type CanvasLockCallbacks, type SettingsCallbacks, type LegendCallbacks, type NorthPointerCallbacks } from './layout/DesktopSidebar';
 import { SettingsModal } from './layout/SettingsModal';
 import { PropertiesPanel, type ProjectCallbacks } from './layout/PropertiesPanel';
 import { CanvasContainer } from './canvas/CanvasContainer';
@@ -40,6 +41,7 @@ export class App {
 
   private legendStampPreview: Group | null = null;
   private legendStampConfig: LegendConfig | null = null;
+  private northPointerPreview: FabricImage | null = null;
 
   private importManager: ImportManager;
   private exportManager: ExportManager;
@@ -457,6 +459,12 @@ export class App {
       onCreateLegend: () => this.handleCreateLegend()
     };
     this.desktopSidebar.setLegendCallbacks(legendCallbacks);
+
+    // Set up north pointer callbacks
+    const northPointerCallbacks: NorthPointerCallbacks = {
+      onAddNorthPointer: () => this.handleAddNorthPointer()
+    };
+    this.desktopSidebar.setNorthPointerCallbacks(northPointerCallbacks);
 
     // Initialize tool manager with default settings
     const defaultSettings = settingsManager.getSettings();
@@ -945,6 +953,122 @@ export class App {
       canvasEl.removeEventListener('mousedown', this.handleLegendStampPlace);
     }
     window.removeEventListener('keydown', this.handleLegendStampCancel);
+
+    canvas?.requestRenderAll();
+  }
+
+  // North pointer placement
+  private async handleAddNorthPointer(): Promise<void> {
+    const canvas = this.engine?.getCanvas();
+    const canvasEl = this.canvasContainer?.getElement();
+    if (!canvas || !canvasEl) return;
+
+    // Load the north pointer image
+    const img = await FabricImage.fromURL(northPointerImg);
+
+    // Scale to a reasonable default size (100px height)
+    const scale = 100 / (img.height ?? 100);
+    img.scale(scale);
+
+    img.set({
+      opacity: 0.7,
+      selectable: false,
+      evented: false,
+      originX: 'center',
+      originY: 'center'
+    });
+    (img as any).isHelper = true;
+
+    this.northPointerPreview = img;
+    canvas.add(img);
+
+    // Change cursor
+    canvasEl.style.cursor = 'crosshair';
+
+    // Add stamp placement listeners
+    canvasEl.addEventListener('mousemove', this.handleNorthPointerMove);
+    canvasEl.addEventListener('mousedown', this.handleNorthPointerPlace);
+    window.addEventListener('keydown', this.handleNorthPointerCancel);
+
+    this.toastManager?.showToast({
+      title: 'Click to place north pointer',
+      subtitle: 'Press Escape to cancel'
+    });
+  }
+
+  private handleNorthPointerMove = (e: MouseEvent): void => {
+    const canvas = this.engine?.getCanvas();
+    if (!canvas || !this.northPointerPreview) return;
+
+    const pointer = canvas.getPointer(e);
+    this.northPointerPreview.set({
+      left: pointer.x,
+      top: pointer.y
+    });
+    canvas.requestRenderAll();
+  };
+
+  private handleNorthPointerPlace = async (e: MouseEvent): Promise<void> => {
+    if (e.button !== 0) return; // Left click only
+
+    const canvas = this.engine?.getCanvas();
+    if (!canvas) return;
+
+    const pointer = canvas.getPointer(e);
+
+    // Remove the preview
+    if (this.northPointerPreview) {
+      canvas.remove(this.northPointerPreview);
+      this.northPointerPreview = null;
+    }
+
+    // Create the final north pointer image
+    const img = await FabricImage.fromURL(northPointerImg);
+    const scale = 100 / (img.height ?? 100);
+    img.scale(scale);
+
+    img.set({
+      left: pointer.x,
+      top: pointer.y,
+      originX: 'center',
+      originY: 'center'
+    });
+
+    canvas.add(img);
+    canvas.setActiveObject(img);
+    canvas.requestRenderAll();
+
+    // Exit stamp mode
+    this.exitNorthPointerStampMode();
+
+    this.toastManager?.showToast({
+      title: 'North pointer placed',
+      subtitle: 'You can move and resize it'
+    });
+  };
+
+  private handleNorthPointerCancel = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      this.exitNorthPointerStampMode();
+    }
+  };
+
+  private exitNorthPointerStampMode(): void {
+    const canvas = this.engine?.getCanvas();
+    const canvasEl = this.canvasContainer?.getElement();
+
+    if (this.northPointerPreview && canvas) {
+      canvas.remove(this.northPointerPreview);
+      this.northPointerPreview = null;
+    }
+
+    if (canvasEl) {
+      canvasEl.style.cursor = '';
+      canvasEl.removeEventListener('mousemove', this.handleNorthPointerMove);
+      canvasEl.removeEventListener('mousedown', this.handleNorthPointerPlace);
+    }
+    window.removeEventListener('keydown', this.handleNorthPointerCancel);
 
     canvas?.requestRenderAll();
   }
