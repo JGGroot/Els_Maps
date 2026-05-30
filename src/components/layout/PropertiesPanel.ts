@@ -47,8 +47,8 @@ export class PropertiesPanel {
     this.element.style.width = `${LAYOUT.sidebarWidth}px`;
 
     const header = document.createElement('div');
-    header.className = 'p-4 border-b border-border';
-    header.innerHTML = `<h2 class="text-lg font-semibold text-foreground">Properties</h2>`;
+    header.className = 'sidebar-header border-b border-border';
+    header.innerHTML = `<span style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);letter-spacing:0.02em;">Properties</span>`;
     this.element.appendChild(header);
 
     this.contentEl = document.createElement('div');
@@ -92,8 +92,9 @@ export class PropertiesPanel {
     header.className = 'flex justify-between items-center mb-3';
 
     const label = document.createElement('h2');
-    label.className = 'text-sm text-textMuted cursor-pointer hover:text-foreground transition-colors flex items-center gap-1';
-    label.innerHTML = 'Projects <span class="text-xs opacity-60">(click for grid view)</span>';
+    label.className = 'section-label cursor-pointer hover:text-foreground transition-colors flex items-center gap-1';
+    label.style.cssText = 'pointer-events: auto;';
+    label.innerHTML = 'Projects <span style="font-size:10px;opacity:0.5;font-family:\'DM Sans\',sans-serif;text-transform:none;letter-spacing:0;">(grid view)</span>';
     label.addEventListener('click', () => this.showProjectsModal());
     header.appendChild(label);
 
@@ -104,7 +105,8 @@ export class PropertiesPanel {
     actionsRow.className = 'flex gap-2 mb-3';
 
     const newBtn = document.createElement('button');
-    newBtn.className = 'flex-1 px-2 py-1.5 bg-charcoal-light hover:bg-charcoal-lighter rounded text-xs text-foreground transition-colors';
+    newBtn.className = 'action-btn';
+    newBtn.style.cssText = 'flex: 1; width: auto;';
     newBtn.textContent = 'New';
     newBtn.addEventListener('click', async () => {
       await this.projectCallbacks?.onNewProject();
@@ -113,7 +115,8 @@ export class PropertiesPanel {
     actionsRow.appendChild(newBtn);
 
     const saveBtn = document.createElement('button');
-    saveBtn.className = 'save-btn flex-1 px-2 py-1.5 bg-accent hover:bg-accent/80 rounded text-xs text-white transition-colors';
+    saveBtn.className = 'save-btn action-btn';
+    saveBtn.style.cssText = 'flex: 1; width: auto; background: var(--accent); color: #fff;';
     saveBtn.textContent = 'Save';
     saveBtn.addEventListener('click', async () => {
       const currentId = this.projectCallbacks?.getCurrentProjectId();
@@ -141,7 +144,8 @@ export class PropertiesPanel {
     actionsRow.appendChild(saveBtn);
 
     const saveAsBtn = document.createElement('button');
-    saveAsBtn.className = 'flex-1 px-2 py-1.5 bg-charcoal-light hover:bg-charcoal-lighter rounded text-xs text-foreground transition-colors';
+    saveAsBtn.className = 'action-btn';
+    saveAsBtn.style.cssText = 'flex: 1; width: auto;';
     saveAsBtn.textContent = 'Save As';
     saveAsBtn.addEventListener('click', async () => {
       const name = prompt('Project name:', 'Untitled Project');
@@ -179,26 +183,27 @@ export class PropertiesPanel {
 
     if (autosaveInfo) {
       const row = document.createElement('div');
-      row.className = 'flex items-center justify-between p-2 rounded text-xs bg-accent/20 border border-accent/40 transition-colors cursor-pointer';
+      row.className = 'project-row';
+      row.style.cssText = 'background: rgba(196,124,40,0.1); border-color: rgba(196,124,40,0.3);';
 
       const info = document.createElement('div');
       info.className = 'flex-1 min-w-0';
 
       const name = document.createElement('div');
-      name.className = 'text-foreground truncate font-semibold';
+      name.className = 'project-row-name';
       name.textContent = 'Autosaved';
       info.appendChild(name);
 
       const date = document.createElement('div');
-      date.className = 'text-textMuted text-[10px]';
+      date.className = 'project-row-date';
       date.textContent = new Date(autosaveInfo.savedAt).toLocaleString();
       info.appendChild(date);
 
       row.appendChild(info);
 
       const badge = document.createElement('div');
-      badge.className = 'text-[10px] uppercase tracking-wide text-accent';
-      badge.textContent = 'Pinned';
+      badge.style.cssText = 'font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:var(--accent);font-family:\'Syne\',sans-serif;font-weight:600;';
+      badge.textContent = 'Auto';
       row.appendChild(badge);
 
       row.addEventListener('click', async () => {
@@ -222,20 +227,21 @@ export class PropertiesPanel {
 
     projects.forEach((project) => {
       const row = document.createElement('div');
-      row.className = `flex items-center justify-between p-2 rounded text-xs ${
-        project.id === currentId ? 'bg-accent/20 border border-accent' : 'bg-charcoal hover:bg-charcoal-light'
-      } transition-colors cursor-pointer`;
+      row.className = 'project-row';
+      if (project.id === currentId) {
+        row.style.cssText = 'background: rgba(196,124,40,0.1); border-color: rgba(196,124,40,0.35);';
+      }
 
       const info = document.createElement('div');
       info.className = 'flex-1 min-w-0';
 
       const name = document.createElement('div');
-      name.className = 'text-foreground truncate';
+      name.className = 'project-row-name';
       name.textContent = project.name;
       info.appendChild(name);
 
       const date = document.createElement('div');
-      date.className = 'text-textMuted text-[10px]';
+      date.className = 'project-row-date';
       date.textContent = new Date(project.modifiedAt).toLocaleDateString();
       info.appendChild(date);
 
@@ -535,7 +541,7 @@ export class PropertiesPanel {
     section.className = 'p-4 border-t border-border mt-auto';
 
     const label = document.createElement('h2');
-    label.className = 'text-sm text-textMuted mb-3';
+    label.className = 'section-label mb-3';
     label.textContent = 'Shortcuts';
     section.appendChild(label);
 
@@ -559,11 +565,12 @@ export class PropertiesPanel {
       row.className = 'flex justify-between items-center';
 
       const keySpan = document.createElement('span');
-      keySpan.className = 'text-foreground font-mono bg-charcoal px-1 rounded';
+      keySpan.className = 'mono-val';
+      keySpan.style.cssText = 'font-size: 10px; padding: 1px 5px; border-radius: 3px; background: var(--bg); border: 1px solid var(--border-subtle);';
       keySpan.textContent = key;
 
       const actionSpan = document.createElement('span');
-      actionSpan.className = 'text-textMuted';
+      actionSpan.style.cssText = 'color: var(--text-muted); font-size: 11px;';
       actionSpan.textContent = action;
 
       row.appendChild(keySpan);
@@ -587,7 +594,12 @@ export class PropertiesPanel {
 
     if (!selectedObject) {
       this.contentEl.innerHTML = `
-        <p class="text-textMuted text-sm">Select an object to view properties</p>
+        <div class="empty-state">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text-subtle);margin-bottom:8px;">
+            <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+          </svg>
+          <p class="empty-state-text">Select an object to edit its properties</p>
+        </div>
       `;
       return;
     }
@@ -616,7 +628,7 @@ export class PropertiesPanel {
     if (isText) {
       const colorSection = document.createElement('div');
       const colorLabel = document.createElement('label');
-      colorLabel.className = 'block text-sm text-textMuted mb-2';
+      colorLabel.className = 'prop-label';
       colorLabel.textContent = 'Text Color';
       colorSection.appendChild(colorLabel);
       colorSection.appendChild(
@@ -626,16 +638,18 @@ export class PropertiesPanel {
 
       const sizeSection = document.createElement('div');
       sizeSection.innerHTML = `
-        <label class="block text-sm text-textMuted mb-2">Font Size</label>
-        <input type="range" min="8" max="120" value="${fontSize}" class="w-full" id="font-size"/>
-        <span class="text-sm text-foreground" id="font-size-value">${fontSize}px</span>
+        <label class="prop-label">Font Size</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+          <input type="range" min="8" max="120" value="${fontSize}" class="w-full" id="font-size" style="flex:1;"/>
+          <span class="mono-val" id="font-size-value">${fontSize}px</span>
+        </div>
       `;
       container.appendChild(sizeSection);
 
       const familySection = document.createElement('div');
       familySection.innerHTML = `
-        <label class="block text-sm text-textMuted mb-2">Font Family</label>
-        <select id="font-family" class="w-full bg-charcoal border border-border rounded px-3 py-2 text-foreground text-sm">
+        <label class="prop-label">Font Family</label>
+        <select id="font-family" style="width:100%;margin-top:6px;background:var(--bg);border:1px solid var(--border-subtle);border-radius:5px;padding:6px 10px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;">
           <option value="IBM Plex Sans" ${fontFamily === 'IBM Plex Sans' ? 'selected' : ''}>IBM Plex Sans</option>
           <option value="Comic Sans MS" ${fontFamily === 'Comic Sans MS' ? 'selected' : ''}>Comic Sans</option>
           <option value="Arial" ${fontFamily === 'Arial' ? 'selected' : ''}>Arial</option>
@@ -660,7 +674,7 @@ export class PropertiesPanel {
     } else if (!isImage) {
       const colorSection = document.createElement('div');
       const colorLabel = document.createElement('label');
-      colorLabel.className = 'block text-sm text-textMuted mb-2';
+      colorLabel.className = 'prop-label';
       colorLabel.textContent = 'Stroke Color';
       colorSection.appendChild(colorLabel);
       colorSection.appendChild(
@@ -670,9 +684,11 @@ export class PropertiesPanel {
 
       const widthSection = document.createElement('div');
       widthSection.innerHTML = `
-        <label class="block text-sm text-textMuted mb-2">Stroke Width</label>
-        <input type="range" min="1" max="20" value="${strokeWidth}" class="w-full" id="stroke-width"/>
-        <span class="text-sm text-foreground" id="stroke-width-value">${strokeWidth}px</span>
+        <label class="prop-label">Stroke Width</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+          <input type="range" min="1" max="20" value="${strokeWidth}" class="w-full" id="stroke-width" style="flex:1;"/>
+          <span class="mono-val" id="stroke-width-value">${strokeWidth}px</span>
+        </div>
       `;
       container.appendChild(widthSection);
 
@@ -689,7 +705,7 @@ export class PropertiesPanel {
       dashSection.className = 'flex items-center gap-3 pt-1';
       dashSection.innerHTML = `
         <input type="checkbox" id="dash-toggle" class="modern-checkbox" ${isDashed ? 'checked' : ''}/>
-        <label for="dash-toggle" class="text-sm text-textMuted">Dashed</label>
+        <label for="dash-toggle" class="toggle-label">Dashed line</label>
       `;
       container.appendChild(dashSection);
 
@@ -702,16 +718,14 @@ export class PropertiesPanel {
     if (isImage) {
       const imageSection = document.createElement('div');
       imageSection.innerHTML = `
-        <div class="flex items-center gap-2">
-          <input type="checkbox" id="image-lock" ${isLocked ? 'checked' : ''}/>
-          <label for="image-lock" class="text-sm text-textMuted">Lock Image</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <input type="checkbox" id="image-lock" class="modern-checkbox" ${isLocked ? 'checked' : ''}/>
+          <label for="image-lock" class="toggle-label">Lock Image</label>
         </div>
-        <div class="mt-3">
-          <button id="lock-canvas-to-image" class="w-full px-3 py-2 bg-accent hover:bg-accent/80 rounded text-sm text-white transition-colors">
-            Lock Canvas to Image
-          </button>
-          <p class="text-xs text-textMuted mt-1">Exports will crop to this image's bounds</p>
-        </div>
+        <button id="lock-canvas-to-image" class="action-btn" style="background:var(--accent);color:#fff;justify-content:center;">
+          Lock Canvas to Image
+        </button>
+        <p style="font-size:10px;color:var(--text-muted);margin-top:6px;line-height:1.4;">Exports will crop to this image's bounds</p>
       `;
       container.appendChild(imageSection);
 

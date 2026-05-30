@@ -3,17 +3,281 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#1a1a1a" />
+    <meta name="theme-color" content="#0d0b08" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <title>El's Maps</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      body { margin: 0; background: #0d0b08; overflow: hidden; }
+
+      /* ── Loading overlay ─────────────────────────────────── */
+      #els-loading {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: #0d0b08;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      #els-loading.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #els-loading-inner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+      }
+
+      #els-logo-svg {
+        width: 460px;
+        height: auto;
+        max-width: 90vw;
+      }
+
+      /* ── Path drawing animations ─────────────────────────── */
+
+      /* Bracket — draws first, establishing the frame */
+      #ls-bracket {
+        stroke-dasharray: 650;
+        stroke-dashoffset: 650;
+        animation: ls-draw 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.1s both;
+      }
+
+      /* Pin silhouette — draws as bracket reaches top */
+      #ls-pin {
+        stroke-dasharray: 700;
+        stroke-dashoffset: 700;
+        animation: ls-draw 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.3s both;
+      }
+
+      /* Map legend lines — appear sequentially */
+      #ls-line1 {
+        stroke-dasharray: 150;
+        stroke-dashoffset: 150;
+        animation: ls-draw 0.22s cubic-bezier(0.4, 0, 0.2, 1) 0.6s both;
+      }
+      #ls-line2 {
+        stroke-dasharray: 150;
+        stroke-dashoffset: 150;
+        animation: ls-draw 0.2s cubic-bezier(0.4, 0, 0.2, 1) 0.75s both;
+      }
+      #ls-line3 {
+        stroke-dasharray: 150;
+        stroke-dashoffset: 150;
+        animation: ls-draw 0.22s cubic-bezier(0.4, 0, 0.2, 1) 0.9s both;
+      }
+
+      /* Location pin rings */
+      #ls-ring1 {
+        stroke-dasharray: 130;
+        stroke-dashoffset: 130;
+        animation: ls-draw 0.38s cubic-bezier(0.4, 0, 0.2, 1) 0.65s both;
+      }
+      #ls-ring2 {
+        stroke-dasharray: 140;
+        stroke-dashoffset: 140;
+        animation: ls-draw 0.38s cubic-bezier(0.4, 0, 0.2, 1) 0.82s both;
+      }
+
+      /* Background halos fade in quietly */
+      #ls-halo1 {
+        opacity: 0;
+        animation: ls-fade 0.4s ease 0.25s both;
+      }
+      #ls-halo2 {
+        opacity: 0;
+        animation: ls-fade 0.4s ease 0.35s both;
+      }
+
+      /* Cover circles — snap in exactly when their ring starts drawing */
+      #ls-cover1 {
+        opacity: 0;
+        animation: ls-snap 0s linear 0.65s both;
+      }
+      #ls-cover2 {
+        opacity: 0;
+        animation: ls-snap 0s linear 0.82s both;
+      }
+
+      /* Dots — spring pop */
+      #ls-dot1 {
+        opacity: 0;
+        transform-box: fill-box;
+        transform-origin: center;
+        transform: scale(0);
+        animation: ls-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) 1.0s both;
+      }
+      #ls-dot2 {
+        opacity: 0;
+        transform-box: fill-box;
+        transform-origin: center;
+        transform: scale(0);
+        animation: ls-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) 1.17s both;
+      }
+
+      /* Triangle arrow — snappy pop */
+      #ls-triangle {
+        opacity: 0;
+        transform-box: fill-box;
+        transform-origin: center;
+        transform: scale(0);
+        animation: ls-pop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) 1.05s both;
+      }
+
+      /* Diamonds — drop in with bounce */
+      #ls-diamond1 {
+        opacity: 0;
+        transform-box: fill-box;
+        transform-origin: center;
+        transform: scale(0) translateY(-12px);
+        animation: ls-drop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 1.2s both;
+      }
+      #ls-diamond2 {
+        opacity: 0;
+        transform-box: fill-box;
+        transform-origin: center;
+        transform: scale(0);
+        animation: ls-pop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) 1.35s both;
+      }
+
+      /* Text — glide up with stagger */
+      #ls-text-els {
+        opacity: 0;
+        animation: ls-text-in 0.5s cubic-bezier(0.2, 0, 0, 1) 1.4s both;
+      }
+      #ls-text-maps {
+        opacity: 0;
+        animation: ls-text-in 0.5s cubic-bezier(0.2, 0, 0, 1) 1.55s both;
+      }
+
+      /* ── Keyframes ─────────────────────────────────────────── */
+      @keyframes ls-draw {
+        to { stroke-dashoffset: 0; }
+      }
+      @keyframes ls-fade {
+        to { opacity: 1; }
+      }
+      @keyframes ls-snap {
+        to { opacity: 1; }
+      }
+      @keyframes ls-pop {
+        to { opacity: 1; transform: scale(1); }
+      }
+      @keyframes ls-drop {
+        to { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      @keyframes ls-text-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+
+      /* ── Loading dots below logo ────────────────────────────── */
+      #els-loading-dots {
+        display: flex;
+        gap: 7px;
+        opacity: 0;
+        animation: ls-fade 0.3s ease 1.9s both;
+      }
+      #els-loading-dots span {
+        display: block;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: rgba(196, 124, 40, 0.45);
+        animation: ls-pulse 1.3s ease-in-out infinite;
+      }
+      #els-loading-dots span:nth-child(2) { animation-delay: 0.22s; }
+      #els-loading-dots span:nth-child(3) { animation-delay: 0.44s; }
+
+      @keyframes ls-pulse {
+        0%, 100% { transform: scale(0.7); opacity: 0.35; }
+        50%       { transform: scale(1.3); opacity: 1; background: rgba(196, 124, 40, 0.8); }
+      }
+    </style>
   </head>
-  <body class="bg-charcoal text-foreground overflow-hidden">
+  <body>
+    <!-- Loading screen — appears before JS, dismissed after app.init() -->
+    <div id="els-loading" role="status" aria-label="Loading El's Maps">
+      <div id="els-loading-inner">
+        <svg id="els-logo-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
+
+          <!-- Text: Els / Maps -->
+          <text id="ls-text-els"
+            x="360" y="215"
+            font-family="'Syne', 'Segoe UI', sans-serif"
+            font-weight="600" font-size="140" letter-spacing="-3"
+            fill="#ece5d5">Els</text>
+          <text id="ls-text-maps"
+            x="365" y="340"
+            font-family="'DM Sans', 'Segoe UI', sans-serif"
+            font-weight="500" font-size="130" letter-spacing="1"
+            fill="#ece5d5">Maps</text>
+
+          <!-- Decorative elements (translate group mirrors original) -->
+          <g transform="translate(15, 0)">
+
+            <!-- Halos behind the location pins -->
+            <circle id="ls-halo1" cx="260" cy="80" r="28" fill="rgba(196,124,40,0.15)" />
+            <circle id="ls-halo2" cx="85"  cy="215" r="34" fill="rgba(196,124,40,0.15)" />
+
+            <!-- Pin silhouette / teardrop outline -->
+            <path id="ls-pin"
+              d="M 180 200 A 60 60 0 1 1 300 200 C 300 245, 260 290, 240 330 C 220 290, 180 245, 180 200 Z"
+              stroke="rgba(196,124,40,0.22)" stroke-width="18" fill="none" stroke-linejoin="round" />
+
+            <!-- Main bracket (map border) -->
+            <path id="ls-bracket"
+              d="M 155 360 L 115 360 A 30 30 0 0 1 85 330 L 85 110 A 30 30 0 0 1 115 80 L 260 80"
+              stroke="#c47c28" stroke-width="14" fill="none" stroke-linecap="round" />
+
+            <!-- Legend lines -->
+            <path id="ls-line1" d="M 125 185 C 145 185, 145 200, 165 200 L 195 200" stroke="#c47c28" stroke-width="14" fill="none" stroke-linecap="round" />
+            <path id="ls-line2" d="M 125 215 L 195 215"                               stroke="#c47c28" stroke-width="14" fill="none" stroke-linecap="round" />
+            <path id="ls-line3" d="M 125 245 C 145 245, 145 230, 165 230 L 195 230" stroke="#c47c28" stroke-width="14" fill="none" stroke-linecap="round" />
+
+            <!-- Arrow triangle -->
+            <path id="ls-triangle"
+              d="M 218 190 L 262 190 L 240 225 Z"
+              fill="#c47c28" stroke="#c47c28" stroke-width="2" stroke-linejoin="round" />
+
+            <!-- Location pin 1 (top right) -->
+            <circle id="ls-cover1" cx="260" cy="80" r="20" fill="#0d0b08" />
+            <circle id="ls-ring1"  cx="260" cy="80" r="18" stroke="#c47c28" stroke-width="10" fill="none" />
+            <circle id="ls-dot1"   cx="260" cy="80" r="7"  fill="#c47c28" />
+
+            <!-- Location pin 2 (left) -->
+            <circle id="ls-cover2" cx="85"  cy="215" r="22" fill="#0d0b08" />
+            <circle id="ls-ring2"  cx="85"  cy="215" r="20" stroke="#c47c28" stroke-width="10" fill="none" />
+            <circle id="ls-dot2"   cx="85"  cy="215" r="8"  fill="#c47c28" />
+
+            <!-- Bottom pin tip diamonds -->
+            <path id="ls-diamond1"
+              d="M 185 315 L 212 360 L 185 345 L 158 360 Z"
+              fill="#c47c28" stroke="#c47c28" stroke-width="2" stroke-linejoin="round" />
+            <path id="ls-diamond2"
+              d="M 185 355 L 198 378 L 185 400 L 172 378 Z"
+              fill="#c47c28" stroke="#c47c28" stroke-width="2" stroke-linejoin="round" />
+
+          </g>
+        </svg>
+
+        <div id="els-loading-dots" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    </div>
+
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
