@@ -1289,6 +1289,7 @@ export class EditTool extends BaseTool {
     // Get style from original
     const stroke = polyline.stroke as string;
     const strokeWidth = polyline.strokeWidth as number;
+    const strokeDashArray = (polyline.strokeDashArray as number[]) ?? [];
 
     this.canvas.remove(polyline);
 
@@ -1305,6 +1306,7 @@ export class EditTool extends BaseTool {
         const newPolyline = new Polyline(reorderedPoints, {
           stroke,
           strokeWidth,
+          strokeDashArray,
           fill: 'transparent',
           selectable: true,
           evented: true
@@ -1327,6 +1329,7 @@ export class EditTool extends BaseTool {
           const newPolyline = new Polyline(newWorldPoints, {
             stroke,
             strokeWidth,
+            strokeDashArray,
             fill: 'transparent',
             selectable: true,
             evented: true
@@ -1344,6 +1347,7 @@ export class EditTool extends BaseTool {
           const polyline1 = new Polyline(beforePoints, {
             stroke,
             strokeWidth,
+            strokeDashArray,
             fill: 'transparent',
             selectable: true,
             evented: true
@@ -1356,6 +1360,7 @@ export class EditTool extends BaseTool {
           const polyline2 = new Polyline(afterPoints, {
             stroke,
             strokeWidth,
+            strokeDashArray,
             fill: 'transparent',
             selectable: true,
             evented: true
@@ -1396,6 +1401,7 @@ export class EditTool extends BaseTool {
     // Get style from original
     const stroke = path.stroke as string;
     const strokeWidth = path.strokeWidth as number;
+    const strokeDashArray = (path.strokeDashArray as number[]) ?? [];
 
     // Get world coordinates of all anchor points
     const matrix = path.calcTransformMatrix();
@@ -1431,6 +1437,7 @@ export class EditTool extends BaseTool {
         const newPolyline = new Polyline(newWorldPoints, {
           stroke,
           strokeWidth,
+          strokeDashArray,
           fill: 'transparent',
           selectable: true,
           evented: true
@@ -1450,6 +1457,7 @@ export class EditTool extends BaseTool {
         const polyline1 = new Polyline(beforePoints, {
           stroke,
           strokeWidth,
+          strokeDashArray,
           fill: 'transparent',
           selectable: true,
           evented: true
@@ -1462,6 +1470,7 @@ export class EditTool extends BaseTool {
         const polyline2 = new Polyline(afterPoints, {
           stroke,
           strokeWidth,
+          strokeDashArray,
           fill: 'transparent',
           selectable: true,
           evented: true

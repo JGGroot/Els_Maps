@@ -436,6 +436,7 @@ export class AutosplineTool extends BaseTool {
         const source = startTarget?.object ?? endTarget?.object ?? null;
         const stroke = (source?.stroke as string) ?? this.config?.strokeColor ?? '#ffffff';
         const strokeWidth = (source?.strokeWidth as number) ?? this.config?.strokeWidth ?? 2;
+        const strokeDashArray = (source?.strokeDashArray as number[]) ?? (this.config?.strokeDashed ? [8, 6] : []);
 
         merged.remove.forEach((obj) => this.canvas!.remove(obj));
 
@@ -443,6 +444,7 @@ export class AutosplineTool extends BaseTool {
         const finalPath = new Path(pathData, {
           stroke,
           strokeWidth,
+          strokeDashArray,
           fill: 'transparent',
           selectable: true,
           evented: true
@@ -460,6 +462,7 @@ export class AutosplineTool extends BaseTool {
     const finalPath = new Path(pathData, {
       stroke: this.config?.strokeColor ?? '#ffffff',
       strokeWidth: this.config?.strokeWidth ?? 2,
+      strokeDashArray: this.config?.strokeDashed ? [8, 6] : [],
       fill: 'transparent',
       selectable: true,
       evented: true

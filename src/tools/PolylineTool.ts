@@ -179,6 +179,7 @@ export class PolylineTool extends BaseTool {
     const line = new Line([from.x, from.y, to.x, to.y], {
       stroke: this.config?.strokeColor ?? '#ffffff',
       strokeWidth: this.config?.strokeWidth ?? 2,
+      strokeDashArray: this.config?.strokeDashed ? [8, 6] : [],
       selectable: false,
       evented: false
     });
@@ -309,6 +310,7 @@ export class PolylineTool extends BaseTool {
       const shapeOptions = {
         stroke: this.config?.strokeColor ?? '#ffffff',
         strokeWidth: this.config?.strokeWidth ?? 2,
+        strokeDashArray: this.config?.strokeDashed ? [8, 6] : [],
         fill: 'transparent',
         selectable: true,
         evented: true
@@ -394,13 +396,16 @@ export class PolylineTool extends BaseTool {
     const removeObjects: Set<Polyline> = new Set();
     let stroke = this.config?.strokeColor ?? '#ffffff';
     let strokeWidth = this.config?.strokeWidth ?? 2;
+    let strokeDashArray: number[] = this.config?.strokeDashed ? [8, 6] : [];
 
     if (startTarget?.object) {
       stroke = (startTarget.object.stroke as string) ?? stroke;
       strokeWidth = (startTarget.object.strokeWidth as number) ?? strokeWidth;
+      strokeDashArray = (startTarget.object.strokeDashArray as number[]) ?? strokeDashArray;
     } else if (endTarget?.object) {
       stroke = (endTarget.object.stroke as string) ?? stroke;
       strokeWidth = (endTarget.object.strokeWidth as number) ?? strokeWidth;
+      strokeDashArray = (endTarget.object.strokeDashArray as number[]) ?? strokeDashArray;
     }
 
     if (startTarget && endTarget && startTarget.object === endTarget.object) {
@@ -415,6 +420,7 @@ export class PolylineTool extends BaseTool {
       const closedShape = new Polygon(merged, {
         stroke,
         strokeWidth,
+        strokeDashArray,
         fill: 'transparent',
         selectable: true,
         evented: true
@@ -456,6 +462,7 @@ export class PolylineTool extends BaseTool {
     const mergedPolyline = new Polyline(mergedPoints, {
       stroke,
       strokeWidth,
+      strokeDashArray,
       fill: 'transparent',
       selectable: true,
       evented: true

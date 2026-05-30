@@ -21,6 +21,7 @@ export const CANVAS_DEFAULTS = {
 export const TOOL_DEFAULTS = {
   strokeColor: '#ffffff',
   strokeWidth: 2,
+  strokeDashed: false,
   fillColor: 'transparent',
   opacity: 1,
   fontFamily: 'IBM Plex Sans'

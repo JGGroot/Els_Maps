@@ -173,7 +173,9 @@ export class App {
     }, { capture: true });
 
     const handleSpacePanStart = (e: MouseEvent): boolean => {
-      if (!spacePressed) return false;
+      const isMiddle = e.button === 1;
+      const isRightNotDrawing = e.button === 2 && !this.toolManager?.isDrawing();
+      if (!spacePressed && !isMiddle && !isRightNotDrawing) return false;
       const canvas = this.engine?.getCanvas();
       if (!canvas) return false;
 
@@ -206,6 +208,11 @@ export class App {
       this.panStartPoint = null;
       canvasEl.style.cursor = spacePressed ? 'grab' : '';
     };
+
+    // Prevent middle-click scroll and right-click context menu suppression is already handled below
+    canvasEl.addEventListener('mousedown', (e) => {
+      if (e.button === 1) e.preventDefault();
+    }, { capture: true });
 
     canvasEl.addEventListener('mousedown', (e) => {
       const canvas = this.engine?.getCanvas();
@@ -360,6 +367,9 @@ export class App {
       },
       onStrokeWidthChange: (width: number) => {
         this.toolManager?.setConfig({ strokeWidth: width });
+      },
+      onStrokeDashChange: (dashed: boolean) => {
+        this.toolManager?.setConfig({ strokeDashed: dashed });
       }
     };
 
@@ -484,6 +494,9 @@ export class App {
       },
       onStrokeWidthChange: (width: number) => {
         this.updateSelectedObjectProperty('strokeWidth', width);
+      },
+      onStrokeDashChange: (dashed: boolean) => {
+        this.updateSelectedObjectProperty('strokeDashArray', dashed ? [8, 6] : []);
       },
       onFillColorChange: (color: string) => {
         this.updateSelectedObjectProperty('fill', color);

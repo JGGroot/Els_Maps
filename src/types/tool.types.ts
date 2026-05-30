@@ -24,6 +24,7 @@ export interface ToolState {
 export interface ToolConfig {
   strokeColor: string;
   strokeWidth: number;
+  strokeDashed: boolean;
   fillColor: string;
   opacity: number;
   fontFamily: string;

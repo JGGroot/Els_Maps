@@ -204,6 +204,7 @@ export class RectangleTool extends BaseTool {
       fill: this.config?.fillColor ?? 'transparent',
       stroke: this.config?.strokeColor ?? '#ffffff',
       strokeWidth: this.config?.strokeWidth ?? 2,
+      strokeDashArray: this.config?.strokeDashed ? [8, 6] : [],
       selectable: true,
       evented: true
     });

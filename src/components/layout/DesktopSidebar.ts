@@ -3,6 +3,8 @@ import type { ITool } from '@/types';
 import { LAYOUT } from '@/constants';
 import { ToolButton } from '../controls/ToolButton';
 import { themeManager } from '@/utils';
+import { createColorPalettePicker } from '../controls/ColorPalettePicker';
+import type { ColorPalettePickerInstance } from '../controls/ColorPalettePicker';
 
 // Import logos
 import logoLight from '@/assets/logos/ElsMapsLogo_LightMode.png';
@@ -25,6 +27,7 @@ export interface EditActionCallbacks {
 export interface StrokeColorCallbacks {
   onStrokeColorChange: (color: string) => void;
   onStrokeWidthChange: (width: number) => void;
+  onStrokeDashChange: (dashed: boolean) => void;
 }
 
 export interface SnapCallbacks {
@@ -60,8 +63,10 @@ export class DesktopSidebar {
   private legendCallbacks: LegendCallbacks | null = null;
   private northPointerCallbacks: NorthPointerCallbacks | null = null;
   private snapEnabled: boolean = true;
+  private strokeDashed: boolean = false;
   private undoBtn: HTMLButtonElement | null = null;
   private redoBtn: HTMLButtonElement | null = null;
+  private strokeColorPicker: ColorPalettePickerInstance | null = null;
   private lockStatusEl: HTMLElement | null = null;
   private logoImg: HTMLImageElement | null = null;
   private themeUnsubscribe: (() => void) | null = null;
@@ -204,56 +209,20 @@ export class DesktopSidebar {
     const container = document.createElement('div');
     container.className = 'space-y-3';
 
-    // Stroke color
+    // Stroke color palette picker
     const colorLabel = document.createElement('label');
     colorLabel.className = 'block text-xs text-textMuted mb-1';
     colorLabel.textContent = 'Stroke Color';
     container.appendChild(colorLabel);
 
-    const colorInput = document.createElement('input');
-    colorInput.type = 'color';
-    colorInput.id = 'global-stroke-color';
-    colorInput.className = 'w-full h-8 rounded cursor-pointer bg-charcoal border border-border';
-    colorInput.value = '#ffffff';
-    colorInput.addEventListener('input', (e) => {
-      this.strokeCallbacks?.onStrokeColorChange((e.target as HTMLInputElement).value);
-      this.updateQuickColorSelection((e.target as HTMLInputElement).value);
+    this.strokeColorPicker = createColorPalettePicker('#ffffff', (color) => {
+      this.strokeCallbacks?.onStrokeColorChange(color);
     });
-    container.appendChild(colorInput);
-
-    // Quick color swatches
-    const quickColors = [
-      '#ffffff', '#000000', '#ff0000', '#00ff00', '#0000ff', '#ffff00',
-      '#ff00ff', '#00ffff', '#ff8000', '#8000ff', '#00ff80', '#ff0080',
-      '#808080', '#c0c0c0', '#800000', '#008000', '#000080', '#808000'
-    ];
-
-    const swatchContainer = document.createElement('div');
-    swatchContainer.className = 'grid grid-cols-6 gap-1 mt-2';
-    swatchContainer.id = 'quick-color-swatches';
-
-    quickColors.forEach((color) => {
-      const swatch = document.createElement('button');
-      swatch.className = 'w-6 h-6 rounded border border-border hover:border-white transition-colors';
-      swatch.style.backgroundColor = color;
-      swatch.title = color;
-      swatch.dataset.color = color;
-      if (color === '#ffffff') {
-        swatch.classList.add('ring-2', 'ring-primary', 'ring-offset-1', 'ring-offset-surface');
-      }
-      swatch.addEventListener('click', () => {
-        colorInput.value = color;
-        this.strokeCallbacks?.onStrokeColorChange(color);
-        this.updateQuickColorSelection(color);
-      });
-      swatchContainer.appendChild(swatch);
-    });
-
-    container.appendChild(swatchContainer);
+    container.appendChild(this.strokeColorPicker.element);
 
     // Stroke width
     const widthLabel = document.createElement('label');
-    widthLabel.className = 'block text-xs text-textMuted mb-1';
+    widthLabel.className = 'block text-xs text-textMuted mt-2 mb-1';
     widthLabel.textContent = 'Stroke Width';
     container.appendChild(widthLabel);
 
@@ -281,8 +250,26 @@ export class DesktopSidebar {
 
     container.appendChild(widthInputContainer);
 
-    const snapRow = document.createElement('div');
-    snapRow.className = 'flex items-center gap-3 pt-2';
+    // Dashed + Snap toggles side by side
+    const toggleRow = document.createElement('div');
+    toggleRow.className = 'flex items-center gap-4 pt-2';
+
+    const dashedInput = document.createElement('input');
+    dashedInput.type = 'checkbox';
+    dashedInput.id = 'global-dash-toggle';
+    dashedInput.checked = this.strokeDashed;
+    dashedInput.className = 'modern-checkbox';
+    dashedInput.addEventListener('change', (e) => {
+      const dashed = (e.target as HTMLInputElement).checked;
+      this.strokeDashed = dashed;
+      this.strokeCallbacks?.onStrokeDashChange(dashed);
+    });
+    const dashedLabel = document.createElement('label');
+    dashedLabel.className = 'text-sm text-textMuted flex items-center gap-1.5 cursor-pointer';
+    dashedLabel.htmlFor = 'global-dash-toggle';
+    dashedLabel.textContent = 'Dashed';
+    dashedLabel.prepend(dashedInput);
+    toggleRow.appendChild(dashedLabel);
 
     const snapInput = document.createElement('input');
     snapInput.type = 'checkbox';
@@ -294,15 +281,14 @@ export class DesktopSidebar {
       this.snapEnabled = enabled;
       this.snapCallbacks?.onSnapToggle(enabled);
     });
-    snapRow.appendChild(snapInput);
-
     const snapLabel = document.createElement('label');
-    snapLabel.className = 'text-sm text-textMuted';
+    snapLabel.className = 'text-sm text-textMuted flex items-center gap-1.5 cursor-pointer';
     snapLabel.htmlFor = 'global-snap-toggle';
-    snapLabel.textContent = 'Snap to endpoints';
-    snapRow.appendChild(snapLabel);
+    snapLabel.textContent = 'Snap';
+    snapLabel.prepend(snapInput);
+    toggleRow.appendChild(snapLabel);
 
-    container.appendChild(snapRow);
+    container.appendChild(toggleRow);
 
     section.appendChild(container);
     return section;
@@ -413,11 +399,13 @@ export class DesktopSidebar {
   }
 
   setStrokeColor(color: string): void {
-    const colorInput = this.element.querySelector('#global-stroke-color') as HTMLInputElement | null;
-    if (colorInput) {
-      colorInput.value = color;
-    }
-    this.updateQuickColorSelection(color);
+    this.strokeColorPicker?.setColor(color);
+  }
+
+  setStrokeDashed(dashed: boolean): void {
+    this.strokeDashed = dashed;
+    const input = this.element.querySelector('#global-dash-toggle') as HTMLInputElement | null;
+    if (input) input.checked = dashed;
   }
 
   setStrokeWidth(width: number): void {
@@ -454,18 +442,6 @@ export class DesktopSidebar {
       this.redoBtn.style.opacity = canRedo ? '1' : '0.5';
       this.redoBtn.style.cursor = canRedo ? 'pointer' : 'not-allowed';
     }
-  }
-
-  private updateQuickColorSelection(color: string): void {
-    const swatches = this.element.querySelectorAll('#quick-color-swatches button');
-    swatches.forEach((swatch) => {
-      const btn = swatch as HTMLButtonElement;
-      if (btn.dataset.color?.toLowerCase() === color.toLowerCase()) {
-        btn.classList.add('ring-2', 'ring-primary', 'ring-offset-1', 'ring-offset-surface');
-      } else {
-        btn.classList.remove('ring-2', 'ring-primary', 'ring-offset-1', 'ring-offset-surface');
-      }
-    });
   }
 
   private handleToolClick = (type: ToolType): void => {

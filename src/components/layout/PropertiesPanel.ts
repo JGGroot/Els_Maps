@@ -3,10 +3,12 @@ import { LAYOUT } from '@/constants';
 import type { ToastManager } from '@/components/controls/ToastManager';
 import type { ConfirmModal } from '@/components/controls/ConfirmModal';
 import type { TextInputModal } from '@/components/controls/TextInputModal';
+import { createColorPalettePicker } from '@/components/controls/ColorPalettePicker';
 
 export interface PropertiesPanelCallbacks {
   onStrokeColorChange: (color: string) => void;
   onStrokeWidthChange: (width: number) => void;
+  onStrokeDashChange: (dashed: boolean) => void;
   onFillColorChange: (color: string) => void;
   onFontSizeChange: (size: number) => void;
   onFontFamilyChange: (fontFamily: string) => void;
@@ -573,7 +575,16 @@ export class PropertiesPanel {
     return section;
   }
 
+  private setProjectsCollapsed(collapsed: boolean): void {
+    if (!this.projectsEl) return;
+    const list = this.projectsEl.querySelector('#projects-list') as HTMLElement | null;
+    if (list) list.style.display = collapsed ? 'none' : '';
+    this.contentEl.style.flex = collapsed ? '1 1 auto' : '';
+  }
+
   updateContent(selectedObject: FabricObject | null): void {
+    this.setProjectsCollapsed(!!selectedObject);
+
     if (!selectedObject) {
       this.contentEl.innerHTML = `
         <p class="text-textMuted text-sm">Select an object to view properties</p>
@@ -583,6 +594,7 @@ export class PropertiesPanel {
 
     const stroke = (selectedObject.stroke as string) || '#ffffff';
     const strokeWidth = selectedObject.strokeWidth || 2;
+    const isDashed = Array.isArray(selectedObject.strokeDashArray) && (selectedObject.strokeDashArray as number[]).length > 0;
     const isImage = selectedObject.type === 'image';
     const isText = selectedObject.type === 'i-text' || selectedObject.type === 'text';
     const isLocked = Boolean(
@@ -593,78 +605,48 @@ export class PropertiesPanel {
       selectedObject.lockRotation
     );
 
-    // For text objects, use fill instead of stroke
     const textColor = isText ? ((selectedObject.fill as string) || '#ffffff') : '';
     const fontSize = isText ? ((selectedObject as any).fontSize || 16) : 0;
     const fontFamily = isText ? ((selectedObject as any).fontFamily || 'IBM Plex Sans') : '';
 
-    let html = '<div class="space-y-4">';
+    this.contentEl.innerHTML = '';
+    const container = document.createElement('div');
+    container.className = 'space-y-4';
 
     if (isText) {
-      // Text-specific properties
-      html += `
-        <div>
-          <label class="block text-sm text-textMuted mb-2">Text Color</label>
-          <input type="color" value="${textColor}" class="w-full h-10 rounded cursor-pointer bg-charcoal border border-border" id="fill-color"/>
-        </div>
-        <div>
-          <label class="block text-sm text-textMuted mb-2">Font Size</label>
-          <input type="range" min="8" max="120" value="${fontSize}" class="w-full" id="font-size"/>
-          <span class="text-sm text-foreground" id="font-size-value">${fontSize}px</span>
-        </div>
-        <div>
-          <label class="block text-sm text-textMuted mb-2">Font Family</label>
-          <select id="font-family" class="w-full bg-charcoal border border-border rounded px-3 py-2 text-foreground text-sm">
-            <option value="IBM Plex Sans" ${fontFamily === 'IBM Plex Sans' ? 'selected' : ''}>IBM Plex Sans</option>
-            <option value="Comic Sans MS" ${fontFamily === 'Comic Sans MS' ? 'selected' : ''}>Comic Sans</option>
-            <option value="Arial" ${fontFamily === 'Arial' ? 'selected' : ''}>Arial</option>
-            <option value="Times New Roman" ${fontFamily === 'Times New Roman' ? 'selected' : ''}>Times New Roman</option>
-          </select>
-        </div>
+      const colorSection = document.createElement('div');
+      const colorLabel = document.createElement('label');
+      colorLabel.className = 'block text-sm text-textMuted mb-2';
+      colorLabel.textContent = 'Text Color';
+      colorSection.appendChild(colorLabel);
+      colorSection.appendChild(
+        createColorPalettePicker(textColor, (color) => this.callbacks.onFillColorChange(color)).element
+      );
+      container.appendChild(colorSection);
+
+      const sizeSection = document.createElement('div');
+      sizeSection.innerHTML = `
+        <label class="block text-sm text-textMuted mb-2">Font Size</label>
+        <input type="range" min="8" max="120" value="${fontSize}" class="w-full" id="font-size"/>
+        <span class="text-sm text-foreground" id="font-size-value">${fontSize}px</span>
       `;
-    } else if (!isImage) {
-      // Shape properties (stroke)
-      html += `
-        <div>
-          <label class="block text-sm text-textMuted mb-2">Stroke Color</label>
-          <input type="color" value="${stroke}" class="w-full h-10 rounded cursor-pointer bg-charcoal border border-border" id="stroke-color"/>
-        </div>
-        <div>
-          <label class="block text-sm text-textMuted mb-2">Stroke Width</label>
-          <input type="range" min="1" max="20" value="${strokeWidth}" class="w-full" id="stroke-width"/>
-          <span class="text-sm text-foreground">${strokeWidth}px</span>
-        </div>
+      container.appendChild(sizeSection);
+
+      const familySection = document.createElement('div');
+      familySection.innerHTML = `
+        <label class="block text-sm text-textMuted mb-2">Font Family</label>
+        <select id="font-family" class="w-full bg-charcoal border border-border rounded px-3 py-2 text-foreground text-sm">
+          <option value="IBM Plex Sans" ${fontFamily === 'IBM Plex Sans' ? 'selected' : ''}>IBM Plex Sans</option>
+          <option value="Comic Sans MS" ${fontFamily === 'Comic Sans MS' ? 'selected' : ''}>Comic Sans</option>
+          <option value="Arial" ${fontFamily === 'Arial' ? 'selected' : ''}>Arial</option>
+          <option value="Times New Roman" ${fontFamily === 'Times New Roman' ? 'selected' : ''}>Times New Roman</option>
+        </select>
       `;
-    }
+      container.appendChild(familySection);
 
-    if (isImage) {
-      html += `
-        <div class="flex items-center gap-2">
-          <input type="checkbox" id="image-lock" ${isLocked ? 'checked' : ''}/>
-          <label for="image-lock" class="text-sm text-textMuted">Lock Image</label>
-        </div>
-        <div class="mt-3">
-          <button id="lock-canvas-to-image" class="w-full px-3 py-2 bg-accent hover:bg-accent/80 rounded text-sm text-white transition-colors">
-            Lock Canvas to Image
-          </button>
-          <p class="text-xs text-textMuted mt-1">Exports will crop to this image's bounds</p>
-        </div>
-      `;
-    }
-
-    html += '</div>';
-    this.contentEl.innerHTML = html;
-
-    // Attach event listeners
-    if (isText) {
-      const fillInput = this.contentEl.querySelector('#fill-color') as HTMLInputElement;
-      const fontSizeInput = this.contentEl.querySelector('#font-size') as HTMLInputElement;
-      const fontSizeValue = this.contentEl.querySelector('#font-size-value') as HTMLSpanElement;
-      const fontFamilySelect = this.contentEl.querySelector('#font-family') as HTMLSelectElement;
-
-      fillInput?.addEventListener('input', (e) => {
-        this.callbacks.onFillColorChange((e.target as HTMLInputElement).value);
-      });
+      const fontSizeInput = container.querySelector('#font-size') as HTMLInputElement;
+      const fontSizeValue = container.querySelector('#font-size-value') as HTMLSpanElement;
+      const fontFamilySelect = container.querySelector('#font-family') as HTMLSelectElement;
 
       fontSizeInput?.addEventListener('input', (e) => {
         const size = Number((e.target as HTMLInputElement).value);
@@ -676,27 +658,75 @@ export class PropertiesPanel {
         this.callbacks.onFontFamilyChange((e.target as HTMLSelectElement).value);
       });
     } else if (!isImage) {
-      const colorInput = this.contentEl.querySelector('#stroke-color') as HTMLInputElement;
-      const widthInput = this.contentEl.querySelector('#stroke-width') as HTMLInputElement;
+      const colorSection = document.createElement('div');
+      const colorLabel = document.createElement('label');
+      colorLabel.className = 'block text-sm text-textMuted mb-2';
+      colorLabel.textContent = 'Stroke Color';
+      colorSection.appendChild(colorLabel);
+      colorSection.appendChild(
+        createColorPalettePicker(stroke, (color) => this.callbacks.onStrokeColorChange(color)).element
+      );
+      container.appendChild(colorSection);
 
-      colorInput?.addEventListener('input', (e) => {
-        this.callbacks.onStrokeColorChange((e.target as HTMLInputElement).value);
-      });
+      const widthSection = document.createElement('div');
+      widthSection.innerHTML = `
+        <label class="block text-sm text-textMuted mb-2">Stroke Width</label>
+        <input type="range" min="1" max="20" value="${strokeWidth}" class="w-full" id="stroke-width"/>
+        <span class="text-sm text-foreground" id="stroke-width-value">${strokeWidth}px</span>
+      `;
+      container.appendChild(widthSection);
+
+      const widthInput = container.querySelector('#stroke-width') as HTMLInputElement;
+      const widthValue = container.querySelector('#stroke-width-value') as HTMLSpanElement;
 
       widthInput?.addEventListener('input', (e) => {
-        this.callbacks.onStrokeWidthChange(Number((e.target as HTMLInputElement).value));
+        const w = Number((e.target as HTMLInputElement).value);
+        this.callbacks.onStrokeWidthChange(w);
+        if (widthValue) widthValue.textContent = `${w}px`;
+      });
+
+      const dashSection = document.createElement('div');
+      dashSection.className = 'flex items-center gap-3 pt-1';
+      dashSection.innerHTML = `
+        <input type="checkbox" id="dash-toggle" class="modern-checkbox" ${isDashed ? 'checked' : ''}/>
+        <label for="dash-toggle" class="text-sm text-textMuted">Dashed</label>
+      `;
+      container.appendChild(dashSection);
+
+      const dashInput = dashSection.querySelector('#dash-toggle') as HTMLInputElement;
+      dashInput?.addEventListener('change', (e) => {
+        this.callbacks.onStrokeDashChange((e.target as HTMLInputElement).checked);
       });
     }
 
-    const lockInput = this.contentEl.querySelector('#image-lock') as HTMLInputElement | null;
-    lockInput?.addEventListener('change', (e) => {
-      this.callbacks.onImageLockChange((e.target as HTMLInputElement).checked);
-    });
+    if (isImage) {
+      const imageSection = document.createElement('div');
+      imageSection.innerHTML = `
+        <div class="flex items-center gap-2">
+          <input type="checkbox" id="image-lock" ${isLocked ? 'checked' : ''}/>
+          <label for="image-lock" class="text-sm text-textMuted">Lock Image</label>
+        </div>
+        <div class="mt-3">
+          <button id="lock-canvas-to-image" class="w-full px-3 py-2 bg-accent hover:bg-accent/80 rounded text-sm text-white transition-colors">
+            Lock Canvas to Image
+          </button>
+          <p class="text-xs text-textMuted mt-1">Exports will crop to this image's bounds</p>
+        </div>
+      `;
+      container.appendChild(imageSection);
 
-    const lockCanvasBtn = this.contentEl.querySelector('#lock-canvas-to-image') as HTMLButtonElement | null;
-    lockCanvasBtn?.addEventListener('click', () => {
-      this.callbacks.onLockCanvasToImage();
-    });
+      const lockInput = imageSection.querySelector('#image-lock') as HTMLInputElement;
+      lockInput?.addEventListener('change', (e) => {
+        this.callbacks.onImageLockChange((e.target as HTMLInputElement).checked);
+      });
+
+      const lockCanvasBtn = imageSection.querySelector('#lock-canvas-to-image') as HTMLButtonElement;
+      lockCanvasBtn?.addEventListener('click', () => {
+        this.callbacks.onLockCanvasToImage();
+      });
+    }
+
+    this.contentEl.appendChild(container);
   }
 
   getElement(): HTMLElement {
