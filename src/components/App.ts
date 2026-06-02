@@ -4,7 +4,7 @@ import { jsPDF } from 'jspdf';
 import { CanvasEngine, canvasLockManager } from '@/canvas';
 import { ToolManager, type ToolManagerCallbacks } from '@/tools';
 import { ToolType } from '@/types';
-import { historyManager, snapManager, settingsManager, detectCanvasColors, createLegendGroup } from '@/utils';
+import { historyManager, snapManager, settingsManager, detectCanvasColors, createLegendGroup, applyThemeBackground } from '@/utils';
 import { MainLayout } from './layout/MainLayout';
 import { DesktopSidebar, type FileActionCallbacks, type StrokeColorCallbacks, type EditActionCallbacks, type CanvasLockCallbacks, type SettingsCallbacks, type LegendCallbacks, type NorthPointerCallbacks } from './layout/DesktopSidebar';
 import { SettingsModal } from './layout/SettingsModal';
@@ -834,6 +834,8 @@ export class App {
     const canvas = this.engine?.getCanvas();
     if (canvas) {
       canvas.clear();
+      applyThemeBackground(canvas); // canvas.clear() wipes backgroundColor
+      canvas.requestRenderAll();
       historyManager.clear();
       this.currentProjectId = null;
       await this.storageManager.clearAutosave();

@@ -9,12 +9,12 @@ export const CANVAS_OBJECT_PROPS = ['__elsImageId', '__elsLocked', '__elsLegend'
 const GRID_SIZE = 40;
 
 function getThemeBackgroundColor(): string {
-  return themeManager.getTheme() === 'dark' ? '#1a1a1a' : '#f5f5f5';
+  return themeManager.getTheme() === 'dark' ? '#131109' : '#f5f5f5';
 }
 
 function getThemeGridColor(): string {
   return themeManager.getTheme() === 'dark'
-    ? 'rgba(255, 255, 255, 0.06)'
+    ? 'rgba(255, 255, 255, 0.05)'
     : 'rgba(0, 0, 0, 0.08)';
 }
 

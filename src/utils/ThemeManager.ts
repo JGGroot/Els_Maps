@@ -16,12 +16,10 @@ class ThemeManager {
     const stored = localStorage.getItem(this.STORAGE_KEY);
     if (stored === 'light' || stored === 'dark') {
       this.currentTheme = stored;
-    } else {
-      // Check system preference
-      if (window.matchMedia('(prefers-color-scheme: light)').matches) {
-        this.currentTheme = 'light';
-      }
     }
+    // No OS-preference fallback — app is dark-only in the current design.
+    // A light-mode OS must not override the canvas into a light palette while
+    // the UI remains dark. Re-add matchMedia here if a full light theme ships.
   }
 
   private applyTheme(): void {
