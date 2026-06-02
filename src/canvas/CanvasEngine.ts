@@ -5,9 +5,7 @@ import {
   clamp,
   applyPostLoadVisualState,
   CANVAS_OBJECT_PROPS,
-  getThemeCanvasBackground
 } from '@/utils';
-import { themeManager } from '@/utils/ThemeManager';
 
 type EventCallback<T extends CanvasEventType> = (
   data: CanvasEngineEvents[T]
@@ -52,7 +50,7 @@ export class CanvasEngine {
     this.canvas = new Canvas(canvasEl, {
       width,
       height,
-      backgroundColor: config?.backgroundColor ?? getThemeCanvasBackground(),
+      backgroundColor: config?.backgroundColor ?? '', // grid is CSS on the container
       selection: config?.selection ?? true,
       preserveObjectStacking: config?.preserveObjectStacking ?? true,
       selectionColor: CANVAS_DEFAULTS.selectionColor,
@@ -95,12 +93,7 @@ export class CanvasEngine {
   }
 
   private setupThemeListener(): void {
-    this.themeUnsubscribe = themeManager.subscribe((_theme) => {
-      if (this.canvas) {
-        this.canvas.backgroundColor = getThemeCanvasBackground();
-        this.canvas.requestRenderAll();
-      }
-    });
+    // Grid background is now pure CSS on .canvas-area — no canvas repaint needed.
   }
 
   private setupCanvasEvents(): void {

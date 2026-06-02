@@ -83,6 +83,16 @@ body {
 .bg-charcoal-light { background-color: var(--elevated) !important; transition: background-color 0.2s ease; }
 .bg-charcoal-lighter { background-color: var(--hover) !important; transition: background-color 0.2s ease; }
 .bg-charcoal-dark { background-color: #080706 !important; transition: background-color 0.2s ease; }
+
+/* ─── Canvas work area ───────────────────────────────────────────── */
+/* Grid lives on the container so canvas.clear() can never touch it   */
+.canvas-area {
+  background-color: #131109 !important;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px) !important;
+  background-size: 40px 40px !important;
+}
 .text-foreground  { color: var(--text) !important; }
 .text-textMuted   { color: var(--text-muted) !important; }
 .border-border    { border-color: var(--border) !important; }
