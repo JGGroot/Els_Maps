@@ -7,16 +7,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const app = new App(appContainer);
 
-  // Minimum display time keeps the animation from being cut short
-  const minDisplay = new Promise<void>(resolve => setTimeout(resolve, 3400));
+  const minDisplay  = new Promise<void>(resolve => setTimeout(resolve, 3400));
+  const hardTimeout = new Promise<void>(resolve => setTimeout(resolve, 10000));
 
-  try {
-    await Promise.all([app.init(), minDisplay]);
-  } catch (e) {
-    console.error('App init error:', e);
-  } finally {
-    dismissLoadingScreen();
-  }
+  // Catch init errors inline so a rejection never blocks the loading-screen dismiss.
+  // If init throws, the app will still attempt to render whatever it can.
+  const initSafe = app.init().catch(e => console.error('[Els_Maps] init error:', e));
+
+  // Wait for (init + minimum display time), hard-capped at 10 s.
+  // On slow/broken storage or canvas init the hard cap ensures we always dismiss.
+  await Promise.race([
+    Promise.all([initSafe, minDisplay]),
+    hardTimeout,
+  ]);
+
+  dismissLoadingScreen();
 });
 
 function dismissLoadingScreen(): void {
