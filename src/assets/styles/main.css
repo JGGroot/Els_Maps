@@ -24,6 +24,10 @@
   --danger-bg:        rgba(191, 75, 53, 0.12);
   --success:          #4a9e6a;
 
+  /* canvas work area */
+  --canvas-bg:        #131109;
+  --canvas-grid:      rgba(255, 255, 255, 0.05);
+
   /* legacy aliases so existing Tailwind classes still resolve */
   --color-bg:         var(--bg);
   --color-bg-dark:    #080706;
@@ -52,6 +56,10 @@
   --accent-bg:        rgba(196, 124, 40, 0.10);
   --accent-ring:      rgba(196, 124, 40, 0.30);
   --danger:           #bf4b35;
+
+  /* canvas work area */
+  --canvas-bg:        #f0ece3;
+  --canvas-grid:      rgba(0, 0, 0, 0.07);
 
   --color-bg:         var(--bg);
   --color-bg-dark:    var(--elevated);
@@ -85,13 +93,15 @@ body {
 .bg-charcoal-dark { background-color: #080706 !important; transition: background-color 0.2s ease; }
 
 /* ─── Canvas work area ───────────────────────────────────────────── */
-/* Grid lives on the container so canvas.clear() can never touch it   */
+/* Grid lives on the container so canvas.clear() can never touch it.  */
+/* Colors follow --canvas-bg / --canvas-grid which switch with theme. */
 .canvas-area {
-  background-color: #131109 !important;
+  background-color: var(--canvas-bg) !important;
   background-image:
-    linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px) !important;
+    linear-gradient(var(--canvas-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px) !important;
   background-size: 40px 40px !important;
+  transition: background-color 0.2s ease !important;
 }
 .text-foreground  { color: var(--text) !important; }
 .text-textMuted   { color: var(--text-muted) !important; }
