@@ -50,6 +50,16 @@ export class TextTool extends BaseTool {
       return;
     }
 
+    // Clicking an existing text box edits it instead of stacking a new one.
+    const existing = this.findTextboxAt(point);
+    if (existing) {
+      // A click inside the box already being edited just repositions the caret,
+      // which Fabric handles natively — don't restart the edit session.
+      if (existing === this.activeText && existing.isEditing) return;
+      this.editExisting(existing, event);
+      return;
+    }
+
     this.placeText(point);
   }
 
@@ -65,7 +75,15 @@ export class TextTool extends BaseTool {
 
   onTouchStart(point: TouchPoint): void {
     const fabricPoint = new Point(point.x, point.y);
-    this.placeText(fabricPoint);
+
+    const existing = this.findTextboxAt(fabricPoint);
+    if (existing) {
+      if (!(existing === this.activeText && existing.isEditing)) {
+        this.editExisting(existing);
+      }
+    } else {
+      this.placeText(fabricPoint);
+    }
 
     if (this.isMobile) {
       this.context?.updateReticle(point.x, point.y - LAYOUT.reticleOffset, true);
@@ -157,6 +175,62 @@ export class TextTool extends BaseTool {
     this.canvas.setActiveObject(text);
     text.enterEditing();
     text.selectAll();
+
+    this.canvas.requestRenderAll();
+  }
+
+  /** Topmost editable text box under the given scene point, if any. */
+  private findTextboxAt(point: Point): Textbox | null {
+    if (!this.canvas) return null;
+
+    const objects = this.canvas.getObjects();
+    for (let i = objects.length - 1; i >= 0; i--) {
+      const obj = objects[i];
+      if (!(obj instanceof Textbox)) continue;
+      if ((obj as any).isHelper) continue;
+      obj.setCoords();
+      if (obj.containsPoint(point)) return obj;
+    }
+    return null;
+  }
+
+  /** Enter editing on an existing text box rather than creating a new one. */
+  private editExisting(textbox: Textbox, event?: MouseEvent): void {
+    if (!this.canvas) return;
+
+    // Commit any other box currently being edited first.
+    if (this.activeText && this.activeText !== textbox && this.activeText.isEditing) {
+      this.finishEditing();
+    }
+
+    this.clearPlacementIndicator();
+
+    this.activeText = textbox;
+    this.drawing = true;
+
+    // Enable canvas + this box for text editing.
+    this.canvas.selection = true;
+    this.canvas.skipTargetFind = false;
+    textbox.selectable = true;
+    textbox.evented = true;
+
+    this.canvas.setActiveObject(textbox);
+    textbox.enterEditing();
+
+    // Drop the caret where the user clicked instead of selecting everything.
+    if (event) {
+      try {
+        const index = textbox.getSelectionStartFromPointer(event);
+        textbox.selectionStart = index;
+        textbox.selectionEnd = index;
+      } catch {
+        // Fall back to Fabric's default caret position.
+      }
+    }
+
+    if (this.isMobile) {
+      this.context?.showActionButton('both');
+    }
 
     this.canvas.requestRenderAll();
   }
@@ -262,7 +336,9 @@ export class TextTool extends BaseTool {
   }
 
   cancel(): void {
-    this.cancelEditing();
+    // Switching tools should commit the box (keeping typed content), not discard
+    // it. Empty boxes are dropped by finishEditing.
+    this.finishEditing();
     super.cancel();
   }
 

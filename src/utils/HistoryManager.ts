@@ -55,13 +55,27 @@ export class HistoryManager {
   saveState(): void {
     if (!this.canvas || this.isRestoring) return;
 
-    // Remove any redo history if we're in the middle
-    if (this.currentIndex < this.history.length - 1) {
-      this.history = this.history.slice(0, this.currentIndex + 1);
+    // A direct save supersedes any pending debounced save, so we never push the
+    // same change twice (which would make the first undo appear to do nothing).
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = null;
     }
 
     // Serialize entire canvas state
     const json = this.canvas.toObject([...CANVAS_OBJECT_PROPS]);
+
+    // Skip no-op saves: if the canvas is identical to the current state there is
+    // nothing new to undo to.
+    const current = this.history[this.currentIndex];
+    if (current && JSON.stringify(current.json) === JSON.stringify(json)) {
+      return;
+    }
+
+    // Remove any redo history if we're in the middle
+    if (this.currentIndex < this.history.length - 1) {
+      this.history = this.history.slice(0, this.currentIndex + 1);
+    }
 
     this.history.push({
       json,
