@@ -21,6 +21,7 @@ import { UnsavedChangesModal, type UnsavedChoice } from './controls/UnsavedChang
 import { TextInputModal } from './controls/TextInputModal';
 import { LegendModal, type LegendConfig } from './controls/LegendModal';
 import { ImportOptionsModal } from './controls/ImportOptionsModal';
+import { RichTextToolbar } from './controls/RichTextToolbar';
 
 export class App {
   private container: HTMLElement;
@@ -38,6 +39,7 @@ export class App {
   private renameModal: TextInputModal | null = null;
   private legendModal: LegendModal | null = null;
   private importOptionsModal: ImportOptionsModal | null = null;
+  private richTextToolbar: RichTextToolbar | null = null;
 
   private legendStampPreview: Group | null = null;
   private legendStampConfig: LegendConfig | null = null;
@@ -151,7 +153,20 @@ export class App {
       const canvas = this.engine?.getCanvas();
       if (!canvas) return false;
       const activeObj = canvas.getActiveObject();
-      return activeObj?.type === 'i-text' && (activeObj as any).isEditing === true;
+      const type = activeObj?.type;
+      return (type === 'i-text' || type === 'textbox' || type === 'text') &&
+        (activeObj as any).isEditing === true;
+    };
+
+    // True when keystrokes belong to a text field (canvas text editing or a DOM input).
+    const isTypingContext = (): boolean => {
+      if (isEditingText()) return true;
+      const el = document.activeElement;
+      return (
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement ||
+        (el instanceof HTMLElement && el.isContentEditable)
+      );
     };
 
     window.addEventListener('keydown', (e) => {
@@ -295,6 +310,13 @@ export class App {
     });
 
     window.addEventListener('keydown', (e) => {
+      // While editing text (or typing into a DOM input), let Fabric/the browser
+      // handle keys natively. This is what stops Backspace/Delete from deleting
+      // the entire text box instead of a character, and prevents undo/redo from
+      // destructively reloading the canvas mid-edit.
+      if (isTypingContext()) {
+        return;
+      }
       // Handle Ctrl/Cmd+Z for undo
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
@@ -573,6 +595,24 @@ export class App {
       const selectedObject = objects[0] ?? null;
       this.propertiesPanel?.updateContent(selectedObject);
     });
+
+    // Floating rich-text formatting toolbar for Textbox objects.
+    this.richTextToolbar = new RichTextToolbar(this.layout!.getElement(), {
+      onChange: () => this.commitHistory()
+    });
+    this.richTextToolbar.attach(canvas);
+
+    // Commit a discrete history state once text editing finishes so an edited or
+    // accidentally deleted box can be brought back with undo.
+    canvas.on('text:editing:exited', () => this.commitHistory());
+  }
+
+  private commitHistory(): void {
+    historyManager.saveState();
+    this.desktopSidebar?.updateUndoRedoButtons(
+      historyManager.canUndo(),
+      historyManager.canRedo()
+    );
   }
 
   private handleToolSelect = (type: ToolType): void => {

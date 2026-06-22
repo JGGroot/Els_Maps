@@ -608,7 +608,10 @@ export class PropertiesPanel {
     const strokeWidth = selectedObject.strokeWidth || 2;
     const isDashed = Array.isArray(selectedObject.strokeDashArray) && (selectedObject.strokeDashArray as number[]).length > 0;
     const isImage = selectedObject.type === 'image';
-    const isText = selectedObject.type === 'i-text' || selectedObject.type === 'text';
+    const isText =
+      selectedObject.type === 'i-text' ||
+      selectedObject.type === 'text' ||
+      selectedObject.type === 'textbox';
     const isLocked = Boolean(
       selectedObject.lockMovementX ||
       selectedObject.lockMovementY ||

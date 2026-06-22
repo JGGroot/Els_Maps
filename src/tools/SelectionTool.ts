@@ -39,6 +39,11 @@ export class SelectionTool extends BaseTool {
     if (!this.canvas) return;
 
     if (event.key === 'Delete' || event.key === 'Backspace') {
+      // Never delete a text object that is mid-edit — Backspace must edit text,
+      // not remove the whole box.
+      const active = this.canvas.getActiveObject() as { isEditing?: boolean } | null;
+      if (active?.isEditing) return;
+
       const activeObjects = this.canvas.getActiveObjects();
       if (activeObjects.length > 0) {
         activeObjects.forEach((obj) => this.canvas!.remove(obj));

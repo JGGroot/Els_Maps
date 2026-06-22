@@ -1,4 +1,4 @@
-import { IText, Point, Circle } from 'fabric';
+import { Textbox, Point, Circle } from 'fabric';
 import type { FabricObject } from 'fabric';
 import { ToolType } from '@/types';
 import type { TouchPoint } from '@/types';
@@ -10,7 +10,7 @@ export class TextTool extends BaseTool {
   name = 'Text';
   icon = 'abc';
 
-  private activeText: IText | null = null;
+  private activeText: Textbox | null = null;
   private placementIndicator: Circle | null = null;
   private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
@@ -86,14 +86,11 @@ export class TextTool extends BaseTool {
   }
 
   onKeyDown(event: KeyboardEvent): void {
+    // Escape commits the text box, keeping whatever was typed (empty boxes are
+    // discarded by finishEditing). Enter is intentionally left to Fabric so it
+    // inserts a newline, as expected in a multi-line rich text box.
     if (event.key === 'Escape') {
-      this.cancelEditing();
-    } else if (event.key === 'Enter' && !event.shiftKey && this.activeText) {
-      // Enter without shift finishes editing (shift+enter adds newline)
-      if (this.activeText.isEditing) {
-        this.finishEditing();
-        event.preventDefault();
-      }
+      this.finishEditing();
     }
   }
 
@@ -118,15 +115,20 @@ export class TextTool extends BaseTool {
     // Calculate font size based on stroke width (scaled for readability)
     const fontSize = Math.max(16, (this.config?.strokeWidth ?? 2) * 8);
 
-    // Create new IText (editable text)
-    const text = new IText('', {
+    // Default box width scales with font size so the caret has room to breathe.
+    const width = Math.max(200, fontSize * 12);
+
+    // Create new Textbox (rich, resizable, word-wrapping editable text)
+    const text = new Textbox('', {
       left: point.x,
       top: point.y,
+      width,
       fontFamily: this.config?.fontFamily ?? 'IBM Plex Sans',
       fontSize: fontSize,
       fill: this.config?.strokeColor ?? '#ffffff',
       stroke: 'transparent',
       strokeWidth: 0,
+      textAlign: 'left',
       selectable: true,
       evented: true,
       originX: 'left',
